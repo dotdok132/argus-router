@@ -41,6 +41,8 @@ QWidget* DashboardTab::createMetricCard(const QString &title, const QString &val
         m_lblActiveKeysVal = lblVal;
     } else if (title.contains("RPM")) {
         m_lblRpmVal = lblVal;
+    } else if (title.contains("Rate Limits")) {
+        m_lblFailoversVal = lblVal;
     }
 
     layout->addWidget(lblTitle);
@@ -99,9 +101,9 @@ void DashboardTab::setupUi() {
     metricsLayout->setSpacing(8);
 
     metricsLayout->addWidget(createMetricCard("Total Pool RPM", "0 / 0", "0% Total Load"));
-    metricsLayout->addWidget(createMetricCard("Total Pool TPM", "0", "Token Bucket Active"));
+    metricsLayout->addWidget(createMetricCard("Total Pool TPM", "1,000,000", "Token Bucket Active"));
     metricsLayout->addWidget(createMetricCard("Active Keys", "0 Active", "0 Providers"));
-    metricsLayout->addWidget(createMetricCard("Rate Limits Handled", "0 Rotations", "0 Client Downtime"));
+    metricsLayout->addWidget(createMetricCard("Rate Limits Handled", "0 Failovers", "0 Client Downtime"));
 
     mainLayout->addLayout(metricsLayout);
 
@@ -114,9 +116,9 @@ void DashboardTab::setupUi() {
     QHBoxLayout *pCardsLayout = new QHBoxLayout();
     pCardsLayout->setSpacing(8);
 
-    pCardsLayout->addWidget(createProviderCard("Google Gemini", "0 Active Keys", 0, "STANDBY"));
-    pCardsLayout->addWidget(createProviderCard("Groq Speed Pool", "0 Active Keys", 0, "STANDBY"));
-    pCardsLayout->addWidget(createProviderCard("OpenRouter Auto-Free", "0 Auto Pool", 0, "STANDBY"));
+    pCardsLayout->addWidget(createProviderCard("Google Gemini", "Auto Model Engine", 100, "ACTIVE"));
+    pCardsLayout->addWidget(createProviderCard("Groq Speed Pool", "Llama-3.3 70B", 100, "ACTIVE"));
+    pCardsLayout->addWidget(createProviderCard("OpenRouter Auto-Free", "Auto Failover Pool", 100, "ACTIVE"));
 
     provLayout->addLayout(pCardsLayout);
     mainLayout->addWidget(grpProviders);
@@ -131,7 +133,17 @@ void DashboardTab::setupUi() {
     m_logTable->setHorizontalHeaderLabels(headers);
     m_logTable->verticalHeader()->setVisible(false);
     m_logTable->verticalHeader()->setDefaultSectionSize(34);
-    m_logTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+
+    QHeaderView *hdr = m_logTable->horizontalHeader();
+    hdr->setStretchLastSection(false);
+    hdr->setSectionResizeMode(0, QHeaderView::ResizeToContents); // Time
+    hdr->setSectionResizeMode(1, QHeaderView::ResizeToContents); // Client IP
+    hdr->setSectionResizeMode(2, QHeaderView::Stretch);          // Endpoint / Model
+    hdr->setSectionResizeMode(3, QHeaderView::ResizeToContents); // Provider
+    hdr->setSectionResizeMode(4, QHeaderView::ResizeToContents); // Key Selected
+    hdr->setSectionResizeMode(5, QHeaderView::ResizeToContents); // Status
+    hdr->setSectionResizeMode(6, QHeaderView::ResizeToContents); // Latency
+
     m_logTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_logTable->setAlternatingRowColors(true);
 
@@ -156,12 +168,20 @@ void DashboardTab::refreshMetrics() {
         m_lblActiveKeysVal->setText(QString("%1 Active").arg(activeCount));
     }
     if (m_lblRpmVal) {
-        m_lblRpmVal->setText(QString("0 / %1").arg(totalRpm));
+        m_lblRpmVal->setText(QString("%1 RPM").arg(totalRpm));
     }
 }
 
 void DashboardTab::addLogEntry(const QString &time, const QString &clientIp, const QString &endpoint, const QString &provider, const QString &keyAlias, const QString &status, const QString &latency) {
     if (!m_logTable) return;
+
+    m_totalRequests++;
+    if (status.contains("Failover")) {
+        m_totalFailovers++;
+        if (m_lblFailoversVal) {
+            m_lblFailoversVal->setText(QString("%1 Failovers").arg(m_totalFailovers));
+        }
+    }
 
     int row = 0;
     m_logTable->insertRow(row);
@@ -173,10 +193,13 @@ void DashboardTab::addLogEntry(const QString &time, const QString &clientIp, con
     m_logTable->setItem(row, 4, new QTableWidgetItem(keyAlias));
 
     QTableWidgetItem *statusItem = new QTableWidgetItem(status);
-    if (status.contains("200")) {
-        statusItem->setForeground(QColor("#4ec9b0"));
+    if (status.contains("Failover")) {
+        statusItem->setForeground(QColor("#ce9178")); // Amber for automatic failover
+        statusItem->setToolTip("Upstream provider returned an error. Router automatically failed over to the next key in pool!");
+    } else if (status.contains("200") || status.contains("OK")) {
+        statusItem->setForeground(QColor("#4ec9b0")); // Teal for success
     } else {
-        statusItem->setForeground(QColor("#f14c4c"));
+        statusItem->setForeground(QColor("#f14c4c")); // Red for unhandled error
     }
     m_logTable->setItem(row, 5, statusItem);
     m_logTable->setItem(row, 6, new QTableWidgetItem(latency));

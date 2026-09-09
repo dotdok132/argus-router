@@ -25,7 +25,10 @@ private:
     KeyPoolManager *m_poolMgr;
     QLabel *m_lblActiveKeysVal;
     QLabel *m_lblRpmVal;
+    QLabel *m_lblFailoversVal;
     QTableWidget *m_logTable;
+    int m_totalRequests = 0;
+    int m_totalFailovers = 0;
 };
 
 #endif // DASHBOARDTAB_H
