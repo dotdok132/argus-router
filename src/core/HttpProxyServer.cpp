@@ -132,129 +132,152 @@ void HttpProxyServer::processSocket(QTcpSocket *socket) {
 
     // Handle POST /v1/chat/completions
     if (method == "POST" && (path.contains("/chat/completions") || path.contains("/completions") || path == "/")) {
-        if (!m_poolMgr) {
-            sendHttpResponse(socket, 500, "{\"error\": \"Key pool manager null\"}");
-            return;
+        forwardChatCompletion(socket, bodyData, clientIp, path, 0);
+        return;
+    }
+
+    // Default Fallback Response
+    sendHttpResponse(socket, 200, "{\"status\": \"Argus Token Router active\", \"endpoint\": \"/v1/chat/completions\"}");
+}
+
+void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray &bodyData, const QString &clientIp, const QString &path, int keyAttemptIndex) {
+    if (!m_poolMgr) {
+        sendHttpResponse(socket, 500, "{\"error\": \"Key pool manager null\"}");
+        return;
+    }
+
+    const auto &keys = m_poolMgr->getKeys();
+    QList<ApiKeyItem> activeKeys;
+    for (const auto &k : keys) {
+        if (k.enabled && !k.status.contains("Invalid")) {
+            activeKeys.append(k);
         }
+    }
 
-        const auto &keys = m_poolMgr->getKeys();
-        QList<ApiKeyItem> activeKeys;
-        for (const auto &k : keys) {
-            if (k.enabled && !k.status.contains("Invalid")) {
-                activeKeys.append(k);
-            }
-        }
+    if (activeKeys.isEmpty() || keyAttemptIndex >= activeKeys.size()) {
+        QJsonObject errObj;
+        QJsonObject errInner;
+        errInner["message"] = "All API keys in Argus Token Router pool failed or rate limited!";
+        errInner["type"] = "all_keys_failed";
+        errObj["error"] = errInner;
+        sendHttpResponse(socket, 503, QJsonDocument(errObj).toJson(QJsonDocument::Compact));
+        emit logTraffic(QDateTime::currentDateTime().toString("HH:mm:ss"), clientIp, path, "None", "None", "503 All Failed", "0ms");
+        return;
+    }
 
-        if (activeKeys.isEmpty()) {
-            QJsonObject errObj;
-            QJsonObject errInner;
-            errInner["message"] = "No active API keys available in Argus Token Router pool!";
-            errInner["type"] = "no_active_keys";
-            errObj["error"] = errInner;
-            sendHttpResponse(socket, 503, QJsonDocument(errObj).toJson(QJsonDocument::Compact));
-            emit logTraffic(QDateTime::currentDateTime().toString("HH:mm:ss"), clientIp, path, "None", "None", "503 No Keys", "0ms");
-            return;
-        }
+    // Calculate actual index starting from Round-Robin
+    int targetIdx = (m_rrIndex + keyAttemptIndex) % activeKeys.size();
+    ApiKeyItem selectedKey = activeKeys[targetIdx];
 
-        // Select key via Round-Robin
-        m_rrIndex = (m_rrIndex + 1) % activeKeys.size();
-        ApiKeyItem selectedKey = activeKeys[m_rrIndex];
+    // Prepare Upstream Request
+    QUrl upstreamUrl;
+    QString pLower = selectedKey.provider.toLower();
 
-        // Prepare Upstream Request
-        QUrl upstreamUrl;
-        QString pLower = selectedKey.provider.toLower();
+    if (pLower.contains("gemini")) {
+        upstreamUrl = QUrl("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+    } else if (pLower.contains("groq")) {
+        upstreamUrl = QUrl("https://api.groq.com/openai/v1/chat/completions");
+    } else if (pLower.contains("openrouter")) {
+        upstreamUrl = QUrl("https://openrouter.ai/api/v1/chat/completions");
+    } else if (pLower.contains("anthropic")) {
+        upstreamUrl = QUrl("https://api.anthropic.com/v1/messages");
+    } else {
+        upstreamUrl = QUrl("https://api.openai.com/v1/chat/completions");
+    }
 
+    // Auto Model Alias Rewriter
+    QByteArray payloadToSend = bodyData;
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(bodyData);
+    if (jsonDoc.isObject()) {
+        QJsonObject jsonObj = jsonDoc.object();
+        QString reqModel = jsonObj["model"].toString().trimmed();
+
+        QString targetModel;
         if (pLower.contains("gemini")) {
-            upstreamUrl = QUrl("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+            targetModel = m_poolMgr->getBestGeminiModel(selectedKey.key);
         } else if (pLower.contains("groq")) {
-            upstreamUrl = QUrl("https://api.groq.com/openai/v1/chat/completions");
+            targetModel = "llama-3.3-70b-versatile";
         } else if (pLower.contains("openrouter")) {
-            upstreamUrl = QUrl("https://openrouter.ai/api/v1/chat/completions");
+            targetModel = "meta-llama/llama-3.3-70b-instruct";
         } else if (pLower.contains("anthropic")) {
-            upstreamUrl = QUrl("https://api.anthropic.com/v1/messages");
+            targetModel = "claude-3-5-sonnet-20241022";
         } else {
-            upstreamUrl = QUrl("https://api.openai.com/v1/chat/completions");
+            targetModel = "gpt-4o-mini";
         }
 
-        // Auto Model Alias Rewriter: Map generic "default" / "custom/default" / unknown model names to valid provider models
-        QByteArray payloadToSend = bodyData;
-        QJsonDocument jsonDoc = QJsonDocument::fromJson(bodyData);
-        if (jsonDoc.isObject()) {
-            QJsonObject jsonObj = jsonDoc.object();
-            QString reqModel = jsonObj["model"].toString().trimmed();
+        if (reqModel.isEmpty() || reqModel == "default" || reqModel == "custom/default" || reqModel == "auto" ||
+            (pLower.contains("gemini") && !reqModel.contains("gemini")) ||
+            (pLower.contains("groq") && !reqModel.contains("llama") && !reqModel.contains("mixtral") && !reqModel.contains("deepseek")) ||
+            (pLower.contains("openrouter") && !reqModel.contains("/"))) {
+            jsonObj["model"] = targetModel;
+            payloadToSend = QJsonDocument(jsonObj).toJson(QJsonDocument::Compact);
+        }
+    }
 
-            QString targetModel;
-            if (pLower.contains("gemini")) {
-                targetModel = m_poolMgr ? m_poolMgr->getBestGeminiModel(selectedKey.key) : "gemini-3.6-flash";
-            } else if (pLower.contains("groq")) {
-                targetModel = "llama-3.3-70b-versatile";
-            } else if (pLower.contains("openrouter")) {
-                targetModel = "meta-llama/llama-3.3-70b-instruct";
-            } else if (pLower.contains("anthropic")) {
-                targetModel = "claude-3-5-sonnet-20241022";
-            } else {
-                targetModel = "gpt-4o-mini";
-            }
+    QNetworkRequest upRequest(upstreamUrl);
+    upRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-            if (reqModel.isEmpty() || reqModel == "default" || reqModel == "custom/default" || reqModel == "auto" ||
-                (pLower.contains("gemini") && !reqModel.contains("gemini")) ||
-                (pLower.contains("groq") && !reqModel.contains("llama") && !reqModel.contains("mixtral") && !reqModel.contains("deepseek")) ||
-                (pLower.contains("openrouter") && !reqModel.contains("/"))) {
-                jsonObj["model"] = targetModel;
-                payloadToSend = QJsonDocument(jsonObj).toJson(QJsonDocument::Compact);
-            }
+    if (pLower.contains("gemini")) {
+        upRequest.setRawHeader("Authorization", QString("Bearer %1").arg(selectedKey.key).toUtf8());
+    } else if (pLower.contains("groq") || pLower.contains("openrouter")) {
+        upRequest.setRawHeader("Authorization", QString("Bearer %1").arg(selectedKey.key).toUtf8());
+    } else if (pLower.contains("anthropic")) {
+        upRequest.setRawHeader("x-api-key", selectedKey.key.toUtf8());
+        upRequest.setRawHeader("anthropic-version", "2023-06-01");
+    } else {
+        upRequest.setRawHeader("Authorization", QString("Bearer %1").arg(selectedKey.key).toUtf8());
+    }
+
+    QElapsedTimer *timer = new QElapsedTimer();
+    timer->start();
+
+    QNetworkReply *reply = m_netManager->post(upRequest, payloadToSend);
+
+    connect(reply, &QNetworkReply::finished, this, [this, socket, reply, timer, selectedKey, clientIp, path, bodyData, keyAttemptIndex, activeKeys]() {
+        reply->deleteLater();
+        qint64 latencyMs = timer->elapsed();
+        delete timer;
+
+        int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (statusCode == 0) {
+            statusCode = (reply->error() == QNetworkReply::NoError) ? 200 : 502;
         }
 
-        QNetworkRequest upRequest(upstreamUrl);
-        upRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        QByteArray replyData = reply->readAll();
 
-        if (pLower.contains("gemini")) {
-            upRequest.setRawHeader("Authorization", QString("Bearer %1").arg(selectedKey.key).toUtf8());
-        } else if (pLower.contains("groq") || pLower.contains("openrouter")) {
-            upRequest.setRawHeader("Authorization", QString("Bearer %1").arg(selectedKey.key).toUtf8());
-        } else if (pLower.contains("anthropic")) {
-            upRequest.setRawHeader("x-api-key", selectedKey.key.toUtf8());
-            upRequest.setRawHeader("anthropic-version", "2023-06-01");
-        } else {
-            upRequest.setRawHeader("Authorization", QString("Bearer %1").arg(selectedKey.key).toUtf8());
-        }
-
-        QElapsedTimer *timer = new QElapsedTimer();
-        timer->start();
-
-        QNetworkReply *reply = m_netManager->post(upRequest, payloadToSend);
-
-        connect(reply, &QNetworkReply::finished, this, [this, socket, reply, timer, selectedKey, clientIp, path]() {
-            reply->deleteLater();
-            qint64 latencyMs = timer->elapsed();
-            delete timer;
-
-            int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            if (statusCode == 0) {
-                statusCode = (reply->error() == QNetworkReply::NoError) ? 200 : 502;
-            }
-
-            QByteArray replyData = reply->readAll();
-            sendHttpResponse(socket, statusCode, replyData, "application/json");
-
-            QString statusStr = QString("%1 OK").arg(statusCode);
-            if (statusCode >= 400) {
-                statusStr = QString("%1 Error").arg(statusCode);
-            }
-
+        // If upstream error (429 Rate Limit, 503 Service Unavailable, 502 Bad Gateway, 401 Invalid Key, 500 Server Error):
+        // Automatically failover to next key in pool!
+        if (statusCode == 429 || statusCode == 503 || statusCode == 502 || statusCode == 401 || statusCode == 500) {
+            qWarning() << "[Argus Failover] Key" << selectedKey.alias << "(" << selectedKey.provider << ") failed with status" << statusCode << "- Failing over to next key!";
+            
             emit logTraffic(
                 QDateTime::currentDateTime().toString("HH:mm:ss"),
                 clientIp,
                 path,
                 selectedKey.provider,
                 selectedKey.alias,
-                statusStr,
+                QString("%1 (Failover)").arg(statusCode),
                 QString("%1ms").arg(latencyMs)
             );
-        });
-        return;
-    }
 
-    // Default Fallback Response
-    sendHttpResponse(socket, 200, "{\"status\": \"Argus Token Router active\", \"endpoint\": \"/v1/chat/completions\"}");
+            // Retry seamlessly with next key attempt
+            forwardChatCompletion(socket, bodyData, clientIp, path, keyAttemptIndex + 1);
+            return;
+        }
+
+        // Success: advance Round-Robin index for next client request
+        m_rrIndex = (m_rrIndex + 1) % activeKeys.size();
+
+        sendHttpResponse(socket, statusCode, replyData, "application/json");
+
+        emit logTraffic(
+            QDateTime::currentDateTime().toString("HH:mm:ss"),
+            clientIp,
+            path,
+            selectedKey.provider,
+            selectedKey.alias,
+            QString("%1 OK").arg(statusCode),
+            QString("%1ms").arg(latencyMs)
+        );
+    });
 }

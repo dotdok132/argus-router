@@ -29,6 +29,7 @@ private slots:
 
 private:
     void processSocket(QTcpSocket *socket);
+    void forwardChatCompletion(QTcpSocket *socket, const QByteArray &bodyData, const QString &clientIp, const QString &path, int keyAttemptIndex);
     void sendHttpResponse(QTcpSocket *socket, int statusCode, const QByteArray &content, const QString &contentType = "application/json");
 
     KeyPoolManager *m_poolMgr;
