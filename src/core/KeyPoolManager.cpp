@@ -152,6 +152,7 @@ void KeyPoolManager::loadFromDisk(const QString &filePath) {
         item.tpmLimit = obj["tpmLimit"].toInt(0);
         item.rpmRemaining = obj["rpmRemaining"].toInt(-1);
         item.tpmRemaining = obj["tpmRemaining"].toInt(-1);
+        item.totalTokensUsed = obj["totalTokensUsed"].toVariant().toLongLong();
         item.priority = obj["priority"].toString("Medium");
         item.enabled = obj["enabled"].toBool(true);
 
@@ -186,6 +187,7 @@ void KeyPoolManager::saveToDisk(const QString &filePath) const {
         obj["tpmLimit"] = item.tpmLimit;
         obj["rpmRemaining"] = item.rpmRemaining;
         obj["tpmRemaining"] = item.tpmRemaining;
+        obj["totalTokensUsed"] = item.totalTokensUsed;
         obj["priority"] = item.priority;
         obj["enabled"] = item.enabled;
         array.append(obj);
@@ -198,6 +200,26 @@ void KeyPoolManager::saveToDisk(const QString &filePath) const {
         file.write(doc.toJson(QJsonDocument::Indented));
         file.close();
     }
+}
+
+void KeyPoolManager::recordTokenUsage(const QString &keyId, qint64 tokens) {
+    if (tokens <= 0) return;
+    for (auto &k : m_keys) {
+        if (k.id == keyId) {
+            k.totalTokensUsed += tokens;
+            break;
+        }
+    }
+    saveToDisk();
+    emit keysUpdated();
+}
+
+qint64 KeyPoolManager::getTotalTokensServed() const {
+    qint64 sum = 0;
+    for (const auto &k : m_keys) {
+        sum += k.totalTokensUsed;
+    }
+    return sum;
 }
 
 void KeyPoolManager::updateKeyRateLimitFromHeaders(const QString &keyId, const QList<QNetworkReply::RawHeaderPair> &headers) {

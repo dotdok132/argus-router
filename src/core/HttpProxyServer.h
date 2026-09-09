@@ -22,7 +22,7 @@ public:
     quint16 serverPort() const { return m_tcpServer ? m_tcpServer->serverPort() : 0; }
 
 signals:
-    void logTraffic(const QString &time, const QString &clientIp, const QString &endpoint, const QString &provider, const QString &keyAlias, const QString &status, const QString &latency);
+    void logTraffic(const QString &time, const QString &clientIp, const QString &endpoint, const QString &provider, const QString &keyAlias, const QString &status, const QString &latency, qint64 tokens = 0);
 
 private slots:
     void onNewConnection();

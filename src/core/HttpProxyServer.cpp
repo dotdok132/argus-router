@@ -261,6 +261,24 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
         }
 
         QByteArray replyData = reply->readAll();
+        qint64 totalTokens = 0;
+
+        QJsonDocument resDoc = QJsonDocument::fromJson(replyData);
+        if (resDoc.isObject()) {
+            QJsonObject resObj = resDoc.object();
+            if (resObj.contains("usage") && resObj["usage"].isObject()) {
+                QJsonObject usage = resObj["usage"].toObject();
+                totalTokens = usage["total_tokens"].toVariant().toLongLong();
+            }
+        }
+
+        if (totalTokens == 0 && statusCode == 200 && !replyData.isEmpty()) {
+            totalTokens = qMax<qint64>(1, (bodyData.size() + replyData.size()) / 4);
+        }
+
+        if (m_poolMgr && totalTokens > 0 && statusCode == 200) {
+            m_poolMgr->recordTokenUsage(selectedKey.id, totalTokens);
+        }
 
         // If upstream error (429 Rate Limit, 503 Service Unavailable, 502 Bad Gateway, 401 Invalid Key, 500 Server Error):
         // Automatically failover to next key in pool!
@@ -274,7 +292,8 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
                 selectedKey.provider,
                 selectedKey.alias,
                 QString("%1 (Failover)").arg(statusCode),
-                QString("%1ms").arg(latencyMs)
+                QString("%1ms").arg(latencyMs),
+                0
             );
 
             // Retry seamlessly with next key attempt
@@ -294,7 +313,8 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
             selectedKey.provider,
             selectedKey.alias,
             QString("%1 OK").arg(statusCode),
-            QString("%1ms").arg(latencyMs)
+            QString("%1ms").arg(latencyMs),
+            totalTokens
         );
     });
 }

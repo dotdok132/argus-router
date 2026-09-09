@@ -131,8 +131,8 @@ void DashboardTab::setupUi() {
     QVBoxLayout *logLayout = new QVBoxLayout(grpLog);
     logLayout->setContentsMargins(10, 14, 10, 10);
 
-    m_logTable = new QTableWidget(0, 7);
-    QStringList headers = {"Time", "Client IP", "Endpoint / Model", "Provider", "Key Selected", "Status", "Latency"};
+    m_logTable = new QTableWidget(0, 8);
+    QStringList headers = {"Time", "Client IP", "Endpoint / Model", "Provider", "Key Selected", "Status", "Tokens", "Latency"};
     m_logTable->setHorizontalHeaderLabels(headers);
     m_logTable->verticalHeader()->setVisible(false);
     m_logTable->verticalHeader()->setDefaultSectionSize(34);
@@ -145,7 +145,8 @@ void DashboardTab::setupUi() {
     hdr->setSectionResizeMode(3, QHeaderView::ResizeToContents); // Provider
     hdr->setSectionResizeMode(4, QHeaderView::ResizeToContents); // Key Selected
     hdr->setSectionResizeMode(5, QHeaderView::ResizeToContents); // Status
-    hdr->setSectionResizeMode(6, QHeaderView::ResizeToContents); // Latency
+    hdr->setSectionResizeMode(6, QHeaderView::ResizeToContents); // Tokens
+    hdr->setSectionResizeMode(7, QHeaderView::ResizeToContents); // Latency
 
     m_logTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_logTable->setAlternatingRowColors(true);
@@ -172,6 +173,7 @@ void DashboardTab::refreshMetrics() {
     int activeCount = 0;
     int totalRpm = 0;
     int totalTpm = 0;
+    qint64 totalServed = m_poolMgr->getTotalTokensServed();
 
     struct ProvInfo {
         int totalKeys = 0;
@@ -210,7 +212,11 @@ void DashboardTab::refreshMetrics() {
         m_lblRpmVal->setText(QString("%1 RPM").arg(totalRpm));
     }
     if (m_lblTpmVal) {
-        m_lblTpmVal->setText(QLocale().toString(totalTpm));
+        if (totalServed > 0) {
+            m_lblTpmVal->setText(QString("%1 Served").arg(QLocale().toString(totalServed)));
+        } else {
+            m_lblTpmVal->setText(QLocale().toString(totalTpm));
+        }
     }
 
     if (provMap.isEmpty()) {
@@ -231,10 +237,16 @@ void DashboardTab::refreshMetrics() {
     }
 }
 
-void DashboardTab::addLogEntry(const QString &time, const QString &clientIp, const QString &endpoint, const QString &provider, const QString &keyAlias, const QString &status, const QString &latency) {
+void DashboardTab::addLogEntry(const QString &time, const QString &clientIp, const QString &endpoint, const QString &provider, const QString &keyAlias, const QString &status, const QString &latency, qint64 tokens) {
     if (!m_logTable) return;
 
     m_totalRequests++;
+    if (tokens > 0) {
+        m_totalTokensServed += tokens;
+        if (m_lblTpmVal) {
+            m_lblTpmVal->setText(QString("%1 Served").arg(QLocale().toString(m_totalTokensServed)));
+        }
+    }
     if (status.contains("Failover")) {
         m_totalFailovers++;
         if (m_lblFailoversVal) {
@@ -261,7 +273,13 @@ void DashboardTab::addLogEntry(const QString &time, const QString &clientIp, con
         statusItem->setForeground(QColor("#f14c4c")); // Red for unhandled error
     }
     m_logTable->setItem(row, 5, statusItem);
-    m_logTable->setItem(row, 6, new QTableWidgetItem(latency));
+
+    QString tokStr = tokens > 0 ? QString("%1 tok").arg(QLocale().toString(tokens)) : "-";
+    QTableWidgetItem *tokItem = new QTableWidgetItem(tokStr);
+    tokItem->setForeground(QColor("#dcdcaa")); // Soft yellow for token counts
+    m_logTable->setItem(row, 6, tokItem);
+
+    m_logTable->setItem(row, 7, new QTableWidgetItem(latency));
 
     if (m_logTable->rowCount() > 50) {
         m_logTable->removeRow(50);

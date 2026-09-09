@@ -16,7 +16,7 @@ public:
 
 public slots:
     void refreshMetrics();
-    void addLogEntry(const QString &time, const QString &clientIp, const QString &endpoint, const QString &provider, const QString &keyAlias, const QString &status, const QString &latency);
+    void addLogEntry(const QString &time, const QString &clientIp, const QString &endpoint, const QString &provider, const QString &keyAlias, const QString &status, const QString &latency, qint64 tokens = 0);
 
 private:
     void setupUi();
@@ -33,6 +33,7 @@ private:
     QTableWidget *m_logTable = nullptr;
     int m_totalRequests = 0;
     int m_totalFailovers = 0;
+    qint64 m_totalTokensServed = 0;
 };
 
 #endif // DASHBOARDTAB_H

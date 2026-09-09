@@ -194,6 +194,9 @@ void KeyManagerTab::refreshTable() {
         }
         QTableWidgetItem *tpmItem = new QTableWidgetItem(tpmStr);
         if (k.tpmLimit == 0) tpmItem->setForeground(QColor("#858585"));
+        if (k.totalTokensUsed > 0) {
+            tpmItem->setToolTip(QString("Total Tokens Processed by this Key: %1 tokens").arg(QLocale().toString(k.totalTokensUsed)));
+        }
         m_keysTable->setItem(r, 5, tpmItem);
 
         m_keysTable->setItem(r, 6, new QTableWidgetItem(k.priority));

@@ -19,6 +19,7 @@ struct ApiKeyItem {
     int tpmLimit = 0;    // 0 = Auto-discovered from response headers
     int rpmRemaining = -1;
     int tpmRemaining = -1;
+    qint64 totalTokensUsed = 0;
     QString priority = "Medium";
     bool enabled = true;
     int currentRpm = 0;
@@ -47,6 +48,9 @@ public:
 
     void moveKeyUp(int index);
     void moveKeyDown(int index);
+
+    void recordTokenUsage(const QString &keyId, qint64 tokens);
+    qint64 getTotalTokensServed() const;
 
     bool isDuplicateKey(const QString &keyStr, const QString &ignoreId = "") const;
 
