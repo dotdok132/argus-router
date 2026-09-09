@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Core Network)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Core Network Test)
 
 include_directories(src)
 
@@ -45,3 +45,23 @@ target_link_libraries(qt-token-router PRIVATE
     Qt6::Core
     Qt6::Network
 )
+
+# Automated Test Suite Setup
+enable_testing()
+
+set(TEST_SOURCES
+    tests/test_main.cpp
+    src/core/KeyPoolManager.cpp
+    src/core/HttpProxyServer.cpp
+    src/core/MemoryManager.cpp
+)
+
+add_executable(argus_unit_tests ${TEST_SOURCES})
+target_link_libraries(argus_unit_tests PRIVATE
+    Qt6::Core
+    Qt6::Network
+    Qt6::Test
+)
+
+add_test(NAME ArgusUnitTests COMMAND argus_unit_tests)
+
