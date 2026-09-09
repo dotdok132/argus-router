@@ -1,60 +1,154 @@
-# Argus Token Router (Qt6 / C++)
+# Argus Token Router
 
-A minimalist, high-performance C++ Qt6 GUI application and OpenAI-compatible local proxy server for AI API key pool routing, rate limit prevention, and dynamic model discovery.
+A high-performance, minimalist C++20 / Qt6 GUI application and local OpenAI-compatible API proxy daemon. Designed for multi-key pool failover, auto rate-limit calibration, session token tracking, and transparent markdown-based long-term memory execution.
 
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
-![Qt6](https://img.shields.io/badge/Qt-6.11-green.svg)
+![Qt6](https://img.shields.io/badge/Qt-6.5%2B-green.svg)
+![CMake](https://img.shields.io/badge/CMake-3.16%2B-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)
 
-## Features
+---
 
-- **OpenAI-Compatible Local Proxy Server**: Embedded `QTcpServer` listening on `http://127.0.0.1:8080` handling `/v1/chat/completions` and `/v1/models`.
-- **Key Pool Management**: Add, toggle, delete, and test keys for Google Gemini, Groq, OpenRouter, Anthropic, and custom OpenAI-compatible providers.
-- **Duplicate Key Detection & Warning**: Real-time identification of duplicate API keys with live amber warning banners and table row highlighting.
-- **Dynamic Gemini Discovery & Model Ranking**: Auto-queries Google's `ModelService.ListModels` API, filtering text models and ranking stable Flash/Pro versions dynamically (adapted from LarpHelper).
-- **Universal Model Rewriting**: Automatically maps generic model names (`default`, `custom/default`, `auto`) to valid provider model IDs (`gemini-3.6-flash`, `meta-llama/llama-3.3-70b-instruct`, etc.).
-- **Anti-Spam / Rate Limit Fuse**: 3-second debouncing safety guard per key to prevent API rate-limiting or IP bans during rapid manual pings.
-- **Minimalist Industrial IDE Theme**: Dark mode design system inspired by VS Code and Linear.
+## Overview
+
+**Argus Token Router** acts as a intelligent local API gateway running on `http://127.0.0.1:8080`. It intercepts OpenAI-compatible API calls, routes them across a pool of API keys (Google Gemini, Groq, OpenRouter, Anthropic, OpenAI), balances traffic, handles failovers, and transparently executes memory lookup tools against local `.md` files without exposing JSON tool calls to client applications.
+
+```
++-------------------------------------------------------------------------+
+|                              CLIENT APIS                                |
+|          (larp, Cursor, Cline, Python OpenAI SDK, LangChain, curl)      |
++------------------------------------+------------------------------------+
+                                     |  HTTP POST /v1/chat/completions
+                                     v
++-------------------------------------------------------------------------+
+|                         ARGUS TOKEN ROUTER                              |
+|                       (http://127.0.0.1:8080)                           |
+|                                                                         |
+|  +-----------------------+  +-------------------+  +-----------------+  |
+|  | Multi-Key Failover    |  | Rate-Limit Fuse   |  | Session Token   |  |
+|  | & Round-Robin Pool    |  | & Header Parsing  |  | Usage Metrics   |  |
+|  +-----------+-----------+  +---------+---------+  +--------+--------+  |
+|              |                        |                     |           |
+|              +------------------------+---------------------+           |
+|                                       |                                 |
+|                                       v                                 |
+|  +-------------------------------------------------------------------+  |
+|  |                 TRANSPARENT MEMORY ENGINE                         |  |
+|  |   Injects `get_memory` & `list_memories` schemas into LLM payload  |  |
+|  |   Executes LLM tool calls against local `.memory/*.md` files      |  |
+|  |   Returns clean final text to client without raw JSON tool blocks |  |
+|  +-------------------------------------------------------------------+  |
++------------------------------------+------------------------------------+
+                                     |
+                +--------------------+--------------------+
+                |                    |                    |
+                v                    v                    v
+      +-------------------+  +---------------+  +-------------------+
+      | Google Gemini API |  | OpenRouter    |  | Groq / Anthropic  |
+      +-------------------+  +---------------+  +-------------------+
+```
+
+---
+
+## Key Features
+
+- **OpenAI-Compatible Local Endpoint**: Native support for `/v1/chat/completions` and `/v1/models`. Plug-and-play replacement for local LLM tools.
+- **Multi-Key Pool & Automatic Failover**: Manage multiple API keys per provider. Seamlessly fails over to the next key upon HTTP `429 Too Many Requests`, `500 Server Error`, or invalid key status.
+- **Transparent Long-Term Memory Engine**:
+  - Automatically provisions `.memory/` modules (`user_character.md`, `code_requirements.md`, `project_context.md`).
+  - Intercepts model `tool_calls` internally, executes file reads, and completes the roundtrip loop (`toolDepth < 3`).
+  - The caller client receives a clean, context-aware text response without visible JSON tool call wrappers.
+- **Built-in Memory (.md) Editor Tab**: Integrated IDE-style Markdown editor within the Qt GUI for real-time inspection and editing of memory modules.
+- **Token Usage & Rate-Limit Tracking**:
+  - Live session and total token counts (`totalTokensUsed`) tracked per key.
+  - Automatic HTTP response header parsing (`x-ratelimit-*`, `ratelimit-*`) for dynamic request limit calibration.
+- **Queue & Load Balancing Strategies**:
+  - **Sequential Priority**: Highest-priority keys evaluated first.
+  - **Round Robin**: Distribute requests evenly across active keys.
+  - **Least Loaded**: Direct traffic to keys with highest remaining capacity.
+- **Duplicate Key Detection & Warning**: Identifies duplicate keys with amber warning banners and table row highlighting.
+- **Minimalist Industrial IDE Theme**: Dark mode palette inspired by VS Code and Linear with strict zero-emoji visual guidelines.
+
+---
 
 ## Building from Source
 
 ### Prerequisites
-- CMake 3.16+
-- C++20 compliant compiler (GCC 12+, Clang 15+, MSVC 2022)
-- Qt 6.5+ (`Qt6Core`, `Qt6Widgets`, `Qt6Network`)
 
-### Build Steps
+- **CMake**: 3.16 or newer
+- **C++ Compiler**: Modern C++20 compiler (GCC 12+, Clang 15+, or MSVC 2022)
+- **Qt6 Framework**: `Qt6Core`, `Qt6Widgets`, `Qt6Network`
 
-```bash
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-```
-
-### Running
+#### Installation of Dependencies (Ubuntu / Debian)
 
 ```bash
-./qt-token-router
+sudo apt update
+sudo apt install build-essential cmake qt6-base-dev libqt6network6
 ```
 
-The application starts the local proxy server on `http://127.0.0.1:8080`.
+### Build Instructions
 
-## Connecting CLI Tools & Clients
+```bash
+# Clone the repository
+git clone https://github.com/dotdok132/argus-router.git
+cd argus-router
 
-Configure your CLI tools (such as `larp`, `cursor`, `cline`, or OpenAI Python SDK) to use the local proxy:
+# Configure and compile
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
+
+---
+
+## Quick Start & Running
+
+Launch the compiled executable:
+
+```bash
+./build/qt-token-router
+```
+
+The application opens the Qt6 GUI dashboard and starts the HTTP server listening on `http://127.0.0.1:8080`.
+
+### Connecting Clients
+
+Configure your environment variable or client application to point to the local proxy:
 
 ```bash
 export OPENAI_API_BASE="http://127.0.0.1:8080/v1"
 ```
 
-Example curl request:
+#### Example cURL Request
 
 ```bash
 curl http://127.0.0.1:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "default", "messages": [{"role": "user", "content": "Hello!"}]}'
+  -d '{
+    "model": "auto",
+    "messages": [
+      {"role": "user", "content": "Check memory files and summarize my coding guidelines."}
+    ]
+  }'
 ```
+
+#### Integration with Larp CLI
+
+```bash
+larp why "What are my code requirements saved in memory?"
+```
+
+---
+
+## Directory & Configuration Structure
+
+- **Key Configuration**: `~/.config/ArgusAI/QtTokenRouter/keys.json`
+- **Memory Library**: `.memory/`
+  - `user_character.md`: User personality, preferences, and identity facts.
+  - `code_requirements.md`: Project coding rules, architectural constraints, and stack guidelines.
+  - `project_context.md`: Project summary, module documentation, and active task status.
+
+---
 
 ## License
 
-MIT License.
+This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
