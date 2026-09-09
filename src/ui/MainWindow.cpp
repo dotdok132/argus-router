@@ -13,6 +13,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     m_poolMgr = new KeyPoolManager(this);
     m_proxyServer = new HttpProxyServer(m_poolMgr, this);
     m_memMgr = new MemoryManager(this);
+    m_proxyServer->setMemoryManager(m_memMgr);
 
     setWindowTitle("Argus Token Router");
     resize(1050, 680);

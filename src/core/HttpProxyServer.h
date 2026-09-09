@@ -7,6 +7,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include "KeyPoolManager.h"
+#include "MemoryManager.h"
 
 class HttpProxyServer : public QObject {
     Q_OBJECT
@@ -14,6 +15,8 @@ class HttpProxyServer : public QObject {
 public:
     explicit HttpProxyServer(KeyPoolManager *poolMgr, QObject *parent = nullptr);
     ~HttpProxyServer();
+
+    void setMemoryManager(MemoryManager *memMgr) { m_memMgr = memMgr; }
 
     bool start(quint16 port = 8080);
     void stop();
@@ -29,10 +32,11 @@ private slots:
 
 private:
     void processSocket(QTcpSocket *socket);
-    void forwardChatCompletion(QTcpSocket *socket, const QByteArray &bodyData, const QString &clientIp, const QString &path, int keyAttemptIndex);
+    void forwardChatCompletion(QTcpSocket *socket, const QByteArray &bodyData, const QString &clientIp, const QString &path, int keyAttemptIndex, int toolDepth = 0);
     void sendHttpResponse(QTcpSocket *socket, int statusCode, const QByteArray &content, const QString &contentType = "application/json");
 
     KeyPoolManager *m_poolMgr;
+    MemoryManager *m_memMgr = nullptr;
     QTcpServer *m_tcpServer;
     QNetworkAccessManager *m_netManager;
     int m_rrIndex = 0;

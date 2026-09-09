@@ -140,7 +140,7 @@ void HttpProxyServer::processSocket(QTcpSocket *socket) {
     sendHttpResponse(socket, 200, "{\"status\": \"Argus Token Router active\", \"endpoint\": \"/v1/chat/completions\"}");
 }
 
-void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray &bodyData, const QString &clientIp, const QString &path, int keyAttemptIndex) {
+void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray &bodyData, const QString &clientIp, const QString &path, int keyAttemptIndex, int toolDepth) {
     if (!m_poolMgr) {
         sendHttpResponse(socket, 500, "{\"error\": \"Key pool manager null\"}");
         return;
@@ -194,7 +194,7 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
         upstreamUrl = QUrl("https://api.openai.com/v1/chat/completions");
     }
 
-    // Auto Model Alias Rewriter
+    // Auto Model Alias Rewriter & Memory Tools Injection
     QByteArray payloadToSend = bodyData;
     QString targetModel;
     if (pLower.contains("gemini")) {
@@ -210,8 +210,9 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
     }
 
     QJsonDocument jsonDoc = QJsonDocument::fromJson(bodyData);
-    if (jsonDoc.isObject()) {
-        QJsonObject jsonObj = jsonDoc.object();
+    QJsonObject jsonObj = jsonDoc.isObject() ? jsonDoc.object() : QJsonObject();
+
+    if (!jsonObj.isEmpty()) {
         QString reqModel = jsonObj["model"].toString().trimmed();
 
         if (reqModel.isEmpty() || reqModel == "default" || reqModel == "custom/default" || reqModel == "auto" ||
@@ -219,10 +220,69 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
             (pLower.contains("groq") && !reqModel.contains("llama") && !reqModel.contains("mixtral") && !reqModel.contains("deepseek")) ||
             (pLower.contains("openrouter") && !reqModel.contains("/"))) {
             jsonObj["model"] = targetModel;
-            payloadToSend = QJsonDocument(jsonObj).toJson(QJsonDocument::Compact);
         } else {
             targetModel = reqModel;
         }
+
+        // Inject Memory Tool Schemas & System Instruction on initial request (toolDepth == 0)
+        if (m_memMgr != nullptr && toolDepth == 0) {
+            if (!jsonObj.contains("tools")) {
+                QJsonArray toolsArray;
+
+                QJsonObject getMemTool;
+                getMemTool["type"] = "function";
+                QJsonObject getMemFn;
+                getMemFn["name"] = "get_memory";
+                getMemFn["description"] = "Read the contents of a specific memory .md file from the local library.";
+                QJsonObject getMemParams;
+                getMemParams["type"] = "object";
+                QJsonObject getMemProps;
+                QJsonObject nameProp;
+                nameProp["type"] = "string";
+                nameProp["description"] = "The file name of the memory module, e.g. 'code_requirements.md' or 'user_character.md'.";
+                getMemProps["name"] = nameProp;
+                getMemParams["properties"] = getMemProps;
+                QJsonArray reqArray;
+                reqArray.append("name");
+                getMemParams["required"] = reqArray;
+                getMemFn["parameters"] = getMemParams;
+                getMemTool["function"] = getMemFn;
+                toolsArray.append(getMemTool);
+
+                QJsonObject listMemTool;
+                listMemTool["type"] = "function";
+                QJsonObject listMemFn;
+                listMemFn["name"] = "list_memories";
+                listMemFn["description"] = "List all available memory .md files in the local memory library.";
+                listMemTool["function"] = listMemFn;
+                toolsArray.append(listMemTool);
+
+                jsonObj["tools"] = toolsArray;
+            }
+
+            QJsonArray messages = jsonObj["messages"].toArray();
+            QString memInstruction = "You have access to a local memory library via tools ('get_memory', 'list_memories'). When the user asks about user identity, preferences, code requirements, or project context, automatically call get_memory or list_memories to inspect memory files before answering.";
+
+            bool sysFound = false;
+            if (!messages.isEmpty()) {
+                QJsonObject firstMsg = messages[0].toObject();
+                if (firstMsg["role"].toString() == "system") {
+                    QString existingContent = firstMsg["content"].toString();
+                    firstMsg["content"] = existingContent + "\n\n" + memInstruction;
+                    messages[0] = firstMsg;
+                    sysFound = true;
+                }
+            }
+            if (!sysFound) {
+                QJsonObject sysMsg;
+                sysMsg["role"] = "system";
+                sysMsg["content"] = memInstruction;
+                messages.prepend(sysMsg);
+            }
+            jsonObj["messages"] = messages;
+        }
+
+        payloadToSend = QJsonDocument(jsonObj).toJson(QJsonDocument::Compact);
     }
 
     QString logEndpoint = QString("%1 (%2)").arg(path, targetModel);
@@ -246,7 +306,7 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
 
     QNetworkReply *reply = m_netManager->post(upRequest, payloadToSend);
 
-    connect(reply, &QNetworkReply::finished, this, [this, socket, reply, timer, selectedKey, clientIp, logEndpoint, bodyData, keyAttemptIndex, activeKeys]() {
+    connect(reply, &QNetworkReply::finished, this, [this, socket, reply, timer, selectedKey, clientIp, logEndpoint, bodyData, jsonObj, keyAttemptIndex, activeKeys, toolDepth, path]() {
         reply->deleteLater();
         qint64 latencyMs = timer->elapsed();
         delete timer;
@@ -269,6 +329,73 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
             if (resObj.contains("usage") && resObj["usage"].isObject()) {
                 QJsonObject usage = resObj["usage"].toObject();
                 totalTokens = usage["total_tokens"].toVariant().toLongLong();
+            }
+
+            // Check if model requested a tool execution (Memory Lookup)
+            if (statusCode == 200 && m_memMgr != nullptr && toolDepth < 3) {
+                QJsonArray choices = resObj["choices"].toArray();
+                if (!choices.isEmpty()) {
+                    QJsonObject firstChoice = choices[0].toObject();
+                    QJsonObject messageObj = firstChoice["message"].toObject();
+
+                    if (messageObj.contains("tool_calls") && messageObj["tool_calls"].isArray()) {
+                        QJsonArray toolCalls = messageObj["tool_calls"].toArray();
+                        if (!toolCalls.isEmpty()) {
+                            qDebug() << "[Argus Memory] Intercepted tool call from LLM - depth" << toolDepth;
+
+                            QJsonObject updatedJson = jsonObj;
+                            QJsonArray messages = updatedJson["messages"].toArray();
+                            messages.append(messageObj);
+
+                            for (const auto &tcVal : toolCalls) {
+                                QJsonObject tc = tcVal.toObject();
+                                QString callId = tc["id"].toString();
+                                QJsonObject fnObj = tc["function"].toObject();
+                                QString fnName = fnObj["name"].toString();
+                                QString fnArgs = fnObj["arguments"].toString();
+
+                                QString toolResultStr;
+
+                                if (fnName == "get_memory") {
+                                    QJsonDocument argDoc = QJsonDocument::fromJson(fnArgs.toUtf8());
+                                    QString memName;
+                                    if (argDoc.isObject()) {
+                                        memName = argDoc.object()["name"].toString();
+                                    } else {
+                                        memName = fnArgs;
+                                    }
+
+                                    QString content = m_memMgr->readMemory(memName);
+                                    if (content.isEmpty()) {
+                                        toolResultStr = QString("Memory module '%1' not found.").arg(memName);
+                                    } else {
+                                        toolResultStr = QString("Memory Module (.memory/%1):\n\n%2").arg(memName, content);
+                                    }
+                                    qDebug() << "[Argus Memory] Executed get_memory(" << memName << ")";
+                                } else if (fnName == "list_memories") {
+                                    QStringList files = m_memMgr->listMemories();
+                                    toolResultStr = QString("Available Memory Modules: %1").arg(files.join(", "));
+                                    qDebug() << "[Argus Memory] Executed list_memories()";
+                                } else {
+                                    toolResultStr = "Unknown tool.";
+                                }
+
+                                QJsonObject toolRespMsg;
+                                toolRespMsg["role"] = "tool";
+                                toolRespMsg["tool_call_id"] = callId;
+                                toolRespMsg["content"] = toolResultStr;
+                                messages.append(toolRespMsg);
+                            }
+
+                            updatedJson["messages"] = messages;
+                            QByteArray updatedPayload = QJsonDocument(updatedJson).toJson(QJsonDocument::Compact);
+
+                            // Transparent Internal Roundtrip Loop!
+                            forwardChatCompletion(socket, updatedPayload, clientIp, path, keyAttemptIndex, toolDepth + 1);
+                            return;
+                        }
+                    }
+                }
             }
         }
 
@@ -297,7 +424,7 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
             );
 
             // Retry seamlessly with next key attempt
-            forwardChatCompletion(socket, bodyData, clientIp, logEndpoint, keyAttemptIndex + 1);
+            forwardChatCompletion(socket, bodyData, clientIp, logEndpoint, keyAttemptIndex + 1, toolDepth);
             return;
         }
 
