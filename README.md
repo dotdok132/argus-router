@@ -71,6 +71,18 @@ A high-performance, minimalist C++20 / Qt6 GUI application and local OpenAI-comp
 
 ---
 
+## Installation
+
+### One-Line Automated Installer
+
+Run the following command in your terminal to automatically clone, build, and install the latest version under the binary name `argus-router`:
+
+```bash
+curl -sL https://raw.githubusercontent.com/dotdok132/argus-router/main/install.sh | bash
+```
+
+---
+
 ## Building from Source
 
 ### Prerequisites
