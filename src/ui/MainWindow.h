@@ -6,6 +6,7 @@
 #include <QLabel>
 #include "../core/KeyPoolManager.h"
 #include "../core/HttpProxyServer.h"
+#include "../core/MemoryManager.h"
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -19,6 +20,7 @@ private:
 
     KeyPoolManager *m_poolMgr;
     HttpProxyServer *m_proxyServer;
+    MemoryManager *m_memMgr;
     QTabWidget *m_tabs;
 };
 

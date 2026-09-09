@@ -16,9 +16,11 @@ set(SOURCES
     src/main.cpp
     src/core/KeyPoolManager.cpp
     src/core/HttpProxyServer.cpp
+    src/core/MemoryManager.cpp
     src/ui/MainWindow.cpp
     src/ui/DashboardTab.cpp
     src/ui/KeyManagerTab.cpp
+    src/ui/MemoryTab.cpp
     src/ui/SettingsTab.cpp
     src/ui/AddKeyDialog.cpp
 )
@@ -26,9 +28,11 @@ set(SOURCES
 set(HEADERS
     src/core/KeyPoolManager.h
     src/core/HttpProxyServer.h
+    src/core/MemoryManager.h
     src/ui/MainWindow.h
     src/ui/DashboardTab.h
     src/ui/KeyManagerTab.h
+    src/ui/MemoryTab.h
     src/ui/SettingsTab.h
     src/ui/AddKeyDialog.h
     src/ui/Styles.h

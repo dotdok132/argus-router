@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "DashboardTab.h"
 #include "KeyManagerTab.h"
+#include "MemoryTab.h"
 #include "SettingsTab.h"
 #include "Styles.h"
 
@@ -11,9 +12,10 @@
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     m_poolMgr = new KeyPoolManager(this);
     m_proxyServer = new HttpProxyServer(m_poolMgr, this);
+    m_memMgr = new MemoryManager(this);
 
     setWindowTitle("Argus Token Router");
-    resize(1000, 650);
+    resize(1050, 680);
 
     // Apply Minimalist IDE QSS Theme
     setStyleSheet(Styles::darkTheme());
@@ -41,7 +43,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     mainLayout->addWidget(headerBar);
 
-    // Main Tabs Widget (Overview, Key Pool, Settings)
+    // Main Tabs Widget (Overview, Key Pool, Memory (.md), Settings)
     m_tabs = new QTabWidget(this);
     m_tabs->setContentsMargins(8, 8, 8, 8);
 
@@ -50,6 +52,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     m_tabs->addTab(dashTab, "Overview");
     m_tabs->addTab(new KeyManagerTab(m_poolMgr, this), "Key Pool");
+    m_tabs->addTab(new MemoryTab(m_memMgr, this), "Memory (.md)");
     m_tabs->addTab(new SettingsTab(this), "Settings");
 
     mainLayout->addWidget(m_tabs);
