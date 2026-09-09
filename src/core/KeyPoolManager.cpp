@@ -155,10 +155,17 @@ void KeyPoolManager::loadFromDisk(const QString &filePath) {
         item.priority = obj["priority"].toString("Medium");
         item.enabled = obj["enabled"].toBool(true);
 
+        // Sanitize legacy hardcoded 30 RPM / 1000000 TPM values from existing config
+        if (item.rpmLimit == 30 && (item.tpmLimit == 1000000 || item.tpmLimit == 100000)) {
+            item.rpmLimit = 0;
+            item.tpmLimit = 0;
+        }
+
         m_keys.append(item);
     }
 
     updateDuplicates();
+    saveToDisk();
     emit keysUpdated();
 }
 
@@ -210,25 +217,29 @@ void KeyPoolManager::updateKeyRateLimitFromHeaders(const QString &keyId, const Q
         QString name = QString::fromUtf8(pair.first).toLower();
         QString val = QString::fromUtf8(pair.second).trimmed();
 
-        if (name == "x-ratelimit-limit-requests" || name == "ratelimit-limit-requests" || name == "anthropic-ratelimit-requests-limit") {
+        if (name == "x-ratelimit-limit-requests" || name == "ratelimit-limit-requests" || 
+            name == "x-ratelimit-requests-limit" || name == "anthropic-ratelimit-requests-limit") {
             int limit = val.toInt();
             if (limit > 0 && k.rpmLimit != limit) {
                 k.rpmLimit = limit;
                 updated = true;
             }
-        } else if (name == "x-ratelimit-remaining-requests" || name == "ratelimit-remaining-requests" || name == "anthropic-ratelimit-requests-remaining") {
+        } else if (name == "x-ratelimit-remaining-requests" || name == "ratelimit-remaining-requests" || 
+                   name == "x-ratelimit-requests-remaining" || name == "anthropic-ratelimit-requests-remaining") {
             int rem = val.toInt();
             if (rem >= 0 && k.rpmRemaining != rem) {
                 k.rpmRemaining = rem;
                 updated = true;
             }
-        } else if (name == "x-ratelimit-limit-tokens" || name == "ratelimit-limit-tokens" || name == "anthropic-ratelimit-tokens-limit") {
+        } else if (name == "x-ratelimit-limit-tokens" || name == "ratelimit-limit-tokens" || 
+                   name == "x-ratelimit-tokens-limit" || name == "anthropic-ratelimit-tokens-limit") {
             int limit = val.toInt();
             if (limit > 0 && k.tpmLimit != limit) {
                 k.tpmLimit = limit;
                 updated = true;
             }
-        } else if (name == "x-ratelimit-remaining-tokens" || name == "ratelimit-remaining-tokens" || name == "anthropic-ratelimit-tokens-remaining") {
+        } else if (name == "x-ratelimit-remaining-tokens" || name == "ratelimit-remaining-tokens" || 
+                   name == "x-ratelimit-tokens-remaining" || name == "anthropic-ratelimit-tokens-remaining") {
             int rem = val.toInt();
             if (rem >= 0 && k.tpmRemaining != rem) {
                 k.tpmRemaining = rem;
