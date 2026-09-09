@@ -15,8 +15,10 @@ struct ApiKeyItem {
     QString alias;
     QString key;
     QString status;      // Active, Cooldown, Invalid, Disabled, Untested, Duplicate
-    int rpmLimit = 30;
-    int tpmLimit = 1000000;
+    int rpmLimit = 0;    // 0 = Auto-discovered from response headers
+    int tpmLimit = 0;    // 0 = Auto-discovered from response headers
+    int rpmRemaining = -1;
+    int tpmRemaining = -1;
     QString priority = "Medium";
     bool enabled = true;
     int currentRpm = 0;
@@ -53,6 +55,8 @@ public:
 
     void testKey(const QString &id);
     void testAllKeys();
+
+    void updateKeyRateLimitFromHeaders(const QString &keyId, const QList<QNetworkReply::RawHeaderPair> &headers);
 
     QString getBestGeminiModel(const QString &keyStr);
     QStringList getGeminiModelCandidates(const QString &keyStr);

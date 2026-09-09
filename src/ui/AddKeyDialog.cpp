@@ -47,12 +47,15 @@ void AddKeyDialog::setupUi() {
     connect(m_editKey, &QLineEdit::textChanged, this, &AddKeyDialog::checkDuplicateKey);
 
     m_spinRpm = new QSpinBox();
-    m_spinRpm->setRange(1, 10000);
-    m_spinRpm->setValue(30);
+    m_spinRpm = new QSpinBox();
+    m_spinRpm->setRange(0, 10000);
+    m_spinRpm->setSpecialValueText("Auto (Header Discovery)");
+    m_spinRpm->setValue(0);
 
     m_spinTpm = new QSpinBox();
-    m_spinTpm->setRange(1000, 10000000);
-    m_spinTpm->setValue(1000000);
+    m_spinTpm->setRange(0, 10000000);
+    m_spinTpm->setSpecialValueText("Auto (Header Discovery)");
+    m_spinTpm->setValue(0);
     m_spinTpm->setSingleStep(50000);
 
     m_comboPriority = new QComboBox();
@@ -65,25 +68,17 @@ void AddKeyDialog::setupUi() {
         QString p = m_comboProvider->currentData().toString();
         if (p == "gemini") {
             m_editAlias->setText("Gemini Key");
-            m_spinRpm->setValue(30);
-            m_spinTpm->setValue(1000000);
         } else if (p == "groq") {
             m_editAlias->setText("Groq Key");
-            m_spinRpm->setValue(30);
-            m_spinTpm->setValue(100000);
         } else if (p == "openrouter") {
             m_editAlias->setText("OpenRouter Key");
-            m_spinRpm->setValue(15);
-            m_spinTpm->setValue(200000);
         } else if (p == "anthropic") {
             m_editAlias->setText("Anthropic Key");
-            m_spinRpm->setValue(50);
-            m_spinTpm->setValue(400000);
         } else {
             m_editAlias->setText("Custom Key");
-            m_spinRpm->setValue(60);
-            m_spinTpm->setValue(1000000);
         }
+        m_spinRpm->setValue(0);
+        m_spinTpm->setValue(0);
     };
 
     connect(m_comboProvider, QOverload<int>::of(&QComboBox::currentIndexChanged), this, updateDefaults);

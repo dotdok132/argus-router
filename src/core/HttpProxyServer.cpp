@@ -251,6 +251,10 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
         qint64 latencyMs = timer->elapsed();
         delete timer;
 
+        if (m_poolMgr) {
+            m_poolMgr->updateKeyRateLimitFromHeaders(selectedKey.id, reply->rawHeaderPairs());
+        }
+
         int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (statusCode == 0) {
             statusCode = (reply->error() == QNetworkReply::NoError) ? 200 : 502;

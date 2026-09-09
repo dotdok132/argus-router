@@ -84,15 +84,17 @@ void KeyManagerTab::setupUi() {
     // Precise Column Resize Modes
     QHeaderView *hdr = m_keysTable->horizontalHeader();
     hdr->setStretchLastSection(false);
+    hdr->setMinimumSectionSize(90);
     hdr->setSectionResizeMode(0, QHeaderView::ResizeToContents); // Provider
-    hdr->setSectionResizeMode(1, QHeaderView::Stretch);          // Key Alias (takes remaining space)
+    hdr->setSectionResizeMode(1, QHeaderView::Stretch);          // Key Alias
     hdr->setSectionResizeMode(2, QHeaderView::ResizeToContents); // Key Mask
     hdr->setSectionResizeMode(3, QHeaderView::ResizeToContents); // Status
     hdr->setSectionResizeMode(4, QHeaderView::ResizeToContents); // RPM Limit
     hdr->setSectionResizeMode(5, QHeaderView::ResizeToContents); // TPM Limit
     hdr->setSectionResizeMode(6, QHeaderView::ResizeToContents); // Priority
-    hdr->setSectionResizeMode(7, QHeaderView::Fixed);            // Actions column (fixed width for buttons)
-    m_keysTable->setColumnWidth(7, 300);
+    hdr->setSectionResizeMode(7, QHeaderView::Fixed);            // Actions column
+    m_keysTable->setColumnWidth(1, 150);
+    m_keysTable->setColumnWidth(7, 310);
 
     m_keysTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_keysTable->setAlternatingRowColors(true);
@@ -117,6 +119,18 @@ void KeyManagerTab::refreshTable() {
 
     const auto &keys = m_poolMgr->getKeys();
     int totalKeys = keys.size();
+
+    auto formatLimit = [](int val) -> QString {
+        if (val >= 1000000) {
+            double m = val / 1000000.0;
+            return QString("%1M").arg(m, 0, 'f', (val % 1000000 == 0 ? 0 : 1));
+        }
+        if (val >= 1000) {
+            double k = val / 1000.0;
+            return QString("%1K").arg(k, 0, 'f', (val % 1000 == 0 ? 0 : 1));
+        }
+        return QString::number(val);
+    };
 
     for (int r = 0; r < totalKeys; ++r) {
         const auto &k = keys[r];
@@ -152,8 +166,36 @@ void KeyManagerTab::refreshTable() {
         }
         m_keysTable->setItem(r, 3, statusItem);
 
-        m_keysTable->setItem(r, 4, new QTableWidgetItem(QString("%1 RPM").arg(k.rpmLimit)));
-        m_keysTable->setItem(r, 5, new QTableWidgetItem(QString("%1 TPM").arg(k.tpmLimit)));
+        // Dynamic RPM Column
+        QString rpmStr;
+        if (k.rpmLimit > 0) {
+            if (k.rpmRemaining >= 0) {
+                rpmStr = QString("%1 / %2 RPM").arg(k.rpmRemaining).arg(k.rpmLimit);
+            } else {
+                rpmStr = QString("%1 RPM").arg(k.rpmLimit);
+            }
+        } else {
+            rpmStr = "Auto";
+        }
+        QTableWidgetItem *rpmItem = new QTableWidgetItem(rpmStr);
+        if (k.rpmLimit == 0) rpmItem->setForeground(QColor("#858585"));
+        m_keysTable->setItem(r, 4, rpmItem);
+
+        // Dynamic TPM Column
+        QString tpmStr;
+        if (k.tpmLimit > 0) {
+            if (k.tpmRemaining >= 0) {
+                tpmStr = QString("%1 / %2 TPM").arg(formatLimit(k.tpmRemaining)).arg(formatLimit(k.tpmLimit));
+            } else {
+                tpmStr = QString("%1 TPM").arg(formatLimit(k.tpmLimit));
+            }
+        } else {
+            tpmStr = "Auto";
+        }
+        QTableWidgetItem *tpmItem = new QTableWidgetItem(tpmStr);
+        if (k.tpmLimit == 0) tpmItem->setForeground(QColor("#858585"));
+        m_keysTable->setItem(r, 5, tpmItem);
+
         m_keysTable->setItem(r, 6, new QTableWidgetItem(k.priority));
 
         // Tint duplicate rows amber
@@ -173,16 +215,19 @@ void KeyManagerTab::refreshTable() {
         actLayout->setContentsMargins(4, 4, 4, 4);
         actLayout->setSpacing(4);
 
-        QPushButton *btnUp = new QPushButton("^");
+        QPushButton *btnUp = new QPushButton("▲");
         btnUp->setObjectName("TableGhostButton");
-        btnUp->setFixedWidth(24);
+        btnUp->setFixedWidth(28);
+        btnUp->setCursor(Qt::PointingHandCursor);
         btnUp->setToolTip("Move key UP in failover queue");
         if (r == 0) btnUp->setEnabled(false);
 
-        QPushButton *btnDown = new QPushButton("v");
+        QPushButton *btnDown = new QPushButton("▼");
         btnDown->setObjectName("TableGhostButton");
-        btnDown->setFixedWidth(24);
+        btnDown->setFixedWidth(28);
+        btnDown->setCursor(Qt::PointingHandCursor);
         btnDown->setToolTip("Move key DOWN in failover queue");
+        if (r == totalKeys - 1) btnDown->setEnabled(false);
         if (r == totalKeys - 1) btnDown->setEnabled(false);
 
         QPushButton *btnTest = new QPushButton("Test");

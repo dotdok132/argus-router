@@ -148,8 +148,10 @@ void KeyPoolManager::loadFromDisk(const QString &filePath) {
         item.alias = obj["alias"].toString();
         item.key = obj["key"].toString();
         item.status = obj["status"].toString("Untested");
-        item.rpmLimit = obj["rpmLimit"].toInt(30);
-        item.tpmLimit = obj["tpmLimit"].toInt(1000000);
+        item.rpmLimit = obj["rpmLimit"].toInt(0);
+        item.tpmLimit = obj["tpmLimit"].toInt(0);
+        item.rpmRemaining = obj["rpmRemaining"].toInt(-1);
+        item.tpmRemaining = obj["tpmRemaining"].toInt(-1);
         item.priority = obj["priority"].toString("Medium");
         item.enabled = obj["enabled"].toBool(true);
 
@@ -175,6 +177,8 @@ void KeyPoolManager::saveToDisk(const QString &filePath) const {
         obj["status"] = item.status;
         obj["rpmLimit"] = item.rpmLimit;
         obj["tpmLimit"] = item.tpmLimit;
+        obj["rpmRemaining"] = item.rpmRemaining;
+        obj["tpmRemaining"] = item.tpmRemaining;
         obj["priority"] = item.priority;
         obj["enabled"] = item.enabled;
         array.append(obj);
@@ -186,6 +190,56 @@ void KeyPoolManager::saveToDisk(const QString &filePath) const {
     if (file.open(QIODevice::WriteOnly)) {
         file.write(doc.toJson(QJsonDocument::Indented));
         file.close();
+    }
+}
+
+void KeyPoolManager::updateKeyRateLimitFromHeaders(const QString &keyId, const QList<QNetworkReply::RawHeaderPair> &headers) {
+    int keyIdx = -1;
+    for (int i = 0; i < m_keys.size(); ++i) {
+        if (m_keys[i].id == keyId) {
+            keyIdx = i;
+            break;
+        }
+    }
+    if (keyIdx == -1) return;
+
+    auto &k = m_keys[keyIdx];
+    bool updated = false;
+
+    for (const auto &pair : headers) {
+        QString name = QString::fromUtf8(pair.first).toLower();
+        QString val = QString::fromUtf8(pair.second).trimmed();
+
+        if (name == "x-ratelimit-limit-requests" || name == "ratelimit-limit-requests" || name == "anthropic-ratelimit-requests-limit") {
+            int limit = val.toInt();
+            if (limit > 0 && k.rpmLimit != limit) {
+                k.rpmLimit = limit;
+                updated = true;
+            }
+        } else if (name == "x-ratelimit-remaining-requests" || name == "ratelimit-remaining-requests" || name == "anthropic-ratelimit-requests-remaining") {
+            int rem = val.toInt();
+            if (rem >= 0 && k.rpmRemaining != rem) {
+                k.rpmRemaining = rem;
+                updated = true;
+            }
+        } else if (name == "x-ratelimit-limit-tokens" || name == "ratelimit-limit-tokens" || name == "anthropic-ratelimit-tokens-limit") {
+            int limit = val.toInt();
+            if (limit > 0 && k.tpmLimit != limit) {
+                k.tpmLimit = limit;
+                updated = true;
+            }
+        } else if (name == "x-ratelimit-remaining-tokens" || name == "ratelimit-remaining-tokens" || name == "anthropic-ratelimit-tokens-remaining") {
+            int rem = val.toInt();
+            if (rem >= 0 && k.tpmRemaining != rem) {
+                k.tpmRemaining = rem;
+                updated = true;
+            }
+        }
+    }
+
+    if (updated) {
+        saveToDisk();
+        emit keysUpdated();
     }
 }
 
@@ -261,6 +315,8 @@ void KeyPoolManager::testKey(const QString &id) {
 
     connect(reply, &QNetworkReply::finished, this, [this, reply, id]() {
         reply->deleteLater();
+        updateKeyRateLimitFromHeaders(id, reply->rawHeaderPairs());
+
         int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 
         int targetIdx = -1;
