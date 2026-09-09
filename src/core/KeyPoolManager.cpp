@@ -325,6 +325,7 @@ void KeyPoolManager::testKey(const QString &id) {
     QNetworkReply *reply = m_netManager->get(request);
 
     connect(reply, &QNetworkReply::finished, this, [this, reply, id]() {
+        QByteArray replyData = reply->readAll();
         reply->deleteLater();
         updateKeyRateLimitFromHeaders(id, reply->rawHeaderPairs());
 
@@ -346,6 +347,43 @@ void KeyPoolManager::testKey(const QString &id) {
         if (statusCode == 200) {
             ok = true;
             statusStr = "Active";
+
+            auto &k = m_keys[targetIdx];
+            QString pLower = k.provider.toLower();
+
+            // Try parsing JSON rate limits (e.g. OpenRouter /auth/key response)
+            QJsonDocument jsonDoc = QJsonDocument::fromJson(replyData);
+            if (jsonDoc.isObject()) {
+                QJsonObject root = jsonDoc.object();
+                if (root.contains("data") && root["data"].isObject()) {
+                    QJsonObject dataObj = root["data"].toObject();
+                    if (dataObj.contains("rate_limit") && dataObj["rate_limit"].isObject()) {
+                        QJsonObject rl = dataObj["rate_limit"].toObject();
+                        int reqs = rl["requests"].toInt();
+                        if (reqs > 0) k.rpmLimit = reqs;
+                    }
+                }
+            }
+
+            // Calibrate provider free tier limits if not received from headers/body
+            if (k.rpmLimit == 0) {
+                if (pLower.contains("gemini")) {
+                    k.rpmLimit = 15;
+                    k.tpmLimit = 1000000;
+                } else if (pLower.contains("openrouter")) {
+                    k.rpmLimit = 20;
+                    k.tpmLimit = 200000;
+                } else if (pLower.contains("groq")) {
+                    k.rpmLimit = 30;
+                    k.tpmLimit = 100000;
+                } else if (pLower.contains("anthropic")) {
+                    k.rpmLimit = 50;
+                    k.tpmLimit = 400000;
+                } else {
+                    k.rpmLimit = 60;
+                    k.tpmLimit = 500000;
+                }
+            }
         } else if (statusCode == 429) {
             statusStr = "Rate Limited (429)";
         } else if (statusCode == 401 || statusCode == 403) {

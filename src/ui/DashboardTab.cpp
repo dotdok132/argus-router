@@ -187,13 +187,16 @@ void DashboardTab::refreshMetrics() {
         else if (p.toLower() == "groq") p = "Groq";
         else if (p.toLower() == "anthropic") p = "Anthropic";
 
+        int effRpm = k.rpmLimit > 0 ? k.rpmLimit : (p.contains("Gemini") ? 15 : (p.contains("OpenRouter") ? 20 : (p.contains("Groq") ? 30 : 60)));
+        int effTpm = k.tpmLimit > 0 ? k.tpmLimit : (p.contains("Gemini") ? 1000000 : (p.contains("OpenRouter") ? 200000 : (p.contains("Groq") ? 100000 : 500000)));
+
         provMap[p].totalKeys++;
         if (k.enabled) {
             provMap[p].activeKeys++;
-            provMap[p].totalRpm += k.rpmLimit;
+            provMap[p].totalRpm += effRpm;
             activeCount++;
-            totalRpm += k.rpmLimit;
-            totalTpm += k.tpmLimit;
+            totalRpm += effRpm;
+            totalTpm += effTpm;
         }
     }
 
