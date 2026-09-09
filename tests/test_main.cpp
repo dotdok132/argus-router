@@ -83,20 +83,29 @@ void ArgusRouterTests::testKeyPoolTokenUsage() {
     KeyPoolManager poolMgr(nullptr);
 
     ApiKeyItem k1;
-    k1.id = "test-key-id-100";
+    k1.id = "test-key-id-unique-100";
     k1.alias = "Test Usage Key";
     k1.provider = "Groq Speed Pool";
-    k1.key = "gsk_test123";
+    k1.key = "gsk_test123_unique";
     k1.enabled = true;
 
     poolMgr.addKey(k1);
-    poolMgr.recordTokenUsage("test-key-id-100", 500);
+    
+    qint64 initialTokens = 0;
+    for (const auto &k : poolMgr.getKeys()) {
+        if (k.id == "test-key-id-unique-100") {
+            initialTokens = k.totalTokensUsed;
+            break;
+        }
+    }
+
+    poolMgr.recordTokenUsage("test-key-id-unique-100", 500);
 
     const auto &keys = poolMgr.getKeys();
     bool found = false;
     for (const auto &k : keys) {
-        if (k.id == "test-key-id-100") {
-            QCOMPARE(k.totalTokensUsed, static_cast<qint64>(500));
+        if (k.id == "test-key-id-unique-100") {
+            QCOMPARE(k.totalTokensUsed - initialTokens, static_cast<qint64>(500));
             found = true;
             break;
         }

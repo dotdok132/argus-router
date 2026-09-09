@@ -121,6 +121,9 @@ void HttpProxyServer::processSocket(QTcpSocket *socket) {
         addM("gemini-3.6-flash", "google");
         addM("yandexgpt/latest", "yandex");
         addM("yandexgpt-lite/latest", "yandex");
+        addM("yandexgpt-3/latest", "yandex");
+        addM("yandexgpt-3-lite/latest", "yandex");
+        addM("summarization/latest", "yandex");
         addM("deepseek-chat", "deepseek");
         addM("deepseek-reasoner", "deepseek");
         addM("llama-3.3-70b-versatile", "groq");
