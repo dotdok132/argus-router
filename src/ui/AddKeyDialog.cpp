@@ -33,9 +33,18 @@ void AddKeyDialog::setupUi() {
 
     m_comboProvider = new QComboBox();
     m_comboProvider->addItem("Google Gemini", "gemini");
+    m_comboProvider->addItem("Yandex AI Studio", "yandex");
+    m_comboProvider->addItem("DeepSeek API", "deepseek");
     m_comboProvider->addItem("Groq Speed Pool", "groq");
     m_comboProvider->addItem("OpenRouter Auto-Free", "openrouter");
+    m_comboProvider->addItem("Mistral AI", "mistral");
     m_comboProvider->addItem("Anthropic Claude", "anthropic");
+    m_comboProvider->addItem("Together AI", "together");
+    m_comboProvider->addItem("Fireworks AI", "fireworks");
+    m_comboProvider->addItem("Perplexity AI", "perplexity");
+    m_comboProvider->addItem("Cerebras Inference", "cerebras");
+    m_comboProvider->addItem("SambaNova Systems", "sambanova");
+    m_comboProvider->addItem("Ollama (Local)", "ollama");
     m_comboProvider->addItem("Custom OpenAI-Compatible", "custom");
 
     m_editAlias = new QLineEdit();
@@ -43,10 +52,9 @@ void AddKeyDialog::setupUi() {
 
     m_editKey = new QLineEdit();
     m_editKey->setEchoMode(QLineEdit::Password);
-    m_editKey->setPlaceholderText("Paste API key here (AIzaSy... / gsk_... / sk-or-...)");
+    m_editKey->setPlaceholderText("Paste API key here (AIza... / AQVN... / sk-...)");
     connect(m_editKey, &QLineEdit::textChanged, this, &AddKeyDialog::checkDuplicateKey);
 
-    m_spinRpm = new QSpinBox();
     m_spinRpm = new QSpinBox();
     m_spinRpm->setRange(0, 10000);
     m_spinRpm->setSpecialValueText("Auto (Header Discovery)");
@@ -68,12 +76,30 @@ void AddKeyDialog::setupUi() {
         QString p = m_comboProvider->currentData().toString();
         if (p == "gemini") {
             m_editAlias->setText("Gemini Key");
+        } else if (p == "yandex") {
+            m_editAlias->setText("Yandex AI Studio Key");
+        } else if (p == "deepseek") {
+            m_editAlias->setText("DeepSeek Key");
         } else if (p == "groq") {
             m_editAlias->setText("Groq Key");
         } else if (p == "openrouter") {
             m_editAlias->setText("OpenRouter Key");
+        } else if (p == "mistral") {
+            m_editAlias->setText("Mistral Key");
         } else if (p == "anthropic") {
             m_editAlias->setText("Anthropic Key");
+        } else if (p == "together") {
+            m_editAlias->setText("Together Key");
+        } else if (p == "fireworks") {
+            m_editAlias->setText("Fireworks Key");
+        } else if (p == "perplexity") {
+            m_editAlias->setText("Perplexity Key");
+        } else if (p == "cerebras") {
+            m_editAlias->setText("Cerebras Key");
+        } else if (p == "sambanova") {
+            m_editAlias->setText("SambaNova Key");
+        } else if (p == "ollama") {
+            m_editAlias->setText("Ollama Local");
         } else {
             m_editAlias->setText("Custom Key");
         }

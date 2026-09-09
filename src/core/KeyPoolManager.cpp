@@ -329,16 +329,42 @@ void KeyPoolManager::testKey(const QString &id) {
     if (prov.contains("gemini")) {
         QUrl url(QString("https://generativelanguage.googleapis.com/v1beta/models?key=%1").arg(item.key));
         request.setUrl(url);
+    } else if (prov.contains("yandex")) {
+        request.setUrl(QUrl("https://llm.api.cloud.yandex.net/foundationModels/v1/models"));
+        request.setRawHeader("Authorization", QString("Api-Key %1").arg(item.key).toUtf8());
+    } else if (prov.contains("deepseek")) {
+        request.setUrl(QUrl("https://api.deepseek.com/models"));
+        request.setRawHeader("Authorization", QString("Bearer %1").arg(item.key).toUtf8());
     } else if (prov.contains("groq")) {
         request.setUrl(QUrl("https://api.groq.com/openai/v1/models"));
         request.setRawHeader("Authorization", QString("Bearer %1").arg(item.key).toUtf8());
     } else if (prov.contains("openrouter")) {
         request.setUrl(QUrl("https://openrouter.ai/api/v1/auth/key"));
         request.setRawHeader("Authorization", QString("Bearer %1").arg(item.key).toUtf8());
+    } else if (prov.contains("mistral")) {
+        request.setUrl(QUrl("https://api.mistral.ai/v1/models"));
+        request.setRawHeader("Authorization", QString("Bearer %1").arg(item.key).toUtf8());
     } else if (prov.contains("anthropic")) {
         request.setUrl(QUrl("https://api.anthropic.com/v1/models"));
         request.setRawHeader("x-api-key", item.key.toUtf8());
         request.setRawHeader("anthropic-version", "2023-06-01");
+    } else if (prov.contains("together")) {
+        request.setUrl(QUrl("https://api.together.xyz/v1/models"));
+        request.setRawHeader("Authorization", QString("Bearer %1").arg(item.key).toUtf8());
+    } else if (prov.contains("fireworks")) {
+        request.setUrl(QUrl("https://api.fireworks.ai/inference/v1/models"));
+        request.setRawHeader("Authorization", QString("Bearer %1").arg(item.key).toUtf8());
+    } else if (prov.contains("perplexity")) {
+        request.setUrl(QUrl("https://api.perplexity.ai/models"));
+        request.setRawHeader("Authorization", QString("Bearer %1").arg(item.key).toUtf8());
+    } else if (prov.contains("cerebras")) {
+        request.setUrl(QUrl("https://api.cerebras.ai/v1/models"));
+        request.setRawHeader("Authorization", QString("Bearer %1").arg(item.key).toUtf8());
+    } else if (prov.contains("sambanova")) {
+        request.setUrl(QUrl("https://api.sambanova.ai/v1/models"));
+        request.setRawHeader("Authorization", QString("Bearer %1").arg(item.key).toUtf8());
+    } else if (prov.contains("ollama")) {
+        request.setUrl(QUrl("http://localhost:11434/api/tags"));
     } else {
         request.setUrl(QUrl("https://api.openai.com/v1/models"));
         request.setRawHeader("Authorization", QString("Bearer %1").arg(item.key).toUtf8());
@@ -392,15 +418,42 @@ void KeyPoolManager::testKey(const QString &id) {
                 if (pLower.contains("gemini")) {
                     k.rpmLimit = 15;
                     k.tpmLimit = 1000000;
+                } else if (pLower.contains("yandex")) {
+                    k.rpmLimit = 60;
+                    k.tpmLimit = 300000;
+                } else if (pLower.contains("deepseek")) {
+                    k.rpmLimit = 60;
+                    k.tpmLimit = 200000;
                 } else if (pLower.contains("openrouter")) {
                     k.rpmLimit = 20;
                     k.tpmLimit = 200000;
                 } else if (pLower.contains("groq")) {
                     k.rpmLimit = 30;
                     k.tpmLimit = 100000;
+                } else if (pLower.contains("mistral")) {
+                    k.rpmLimit = 30;
+                    k.tpmLimit = 150000;
                 } else if (pLower.contains("anthropic")) {
                     k.rpmLimit = 50;
                     k.tpmLimit = 400000;
+                } else if (pLower.contains("together")) {
+                    k.rpmLimit = 60;
+                    k.tpmLimit = 200000;
+                } else if (pLower.contains("fireworks")) {
+                    k.rpmLimit = 60;
+                    k.tpmLimit = 200000;
+                } else if (pLower.contains("perplexity")) {
+                    k.rpmLimit = 60;
+                    k.tpmLimit = 200000;
+                } else if (pLower.contains("cerebras")) {
+                    k.rpmLimit = 30;
+                    k.tpmLimit = 100000;
+                } else if (pLower.contains("sambanova")) {
+                    k.rpmLimit = 30;
+                    k.tpmLimit = 100000;
+                } else if (pLower.contains("ollama")) {
+                    k.rpmLimit = 1000;
+                    k.tpmLimit = 10000000;
                 } else {
                     k.rpmLimit = 60;
                     k.tpmLimit = 500000;

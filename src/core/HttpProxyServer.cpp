@@ -117,11 +117,22 @@ void HttpProxyServer::processSocket(QTcpSocket *socket) {
         };
 
         addM("default", "argus");
-        addM("custom/default", "argus");
-        addM("gemini-2.0-flash", "google");
-        addM("llama-3.3-70b-versatile", "groq");
-        addM("google/gemini-2.0-flash-001", "openrouter");
         addM("auto", "argus");
+        addM("gemini-3.6-flash", "google");
+        addM("yandexgpt/latest", "yandex");
+        addM("yandexgpt-lite/latest", "yandex");
+        addM("deepseek-chat", "deepseek");
+        addM("deepseek-reasoner", "deepseek");
+        addM("llama-3.3-70b-versatile", "groq");
+        addM("meta-llama/llama-3.3-70b-instruct", "openrouter");
+        addM("mistral-small-latest", "mistral");
+        addM("claude-3-5-sonnet-20241022", "anthropic");
+        addM("meta-llama/Llama-3.3-70B-Instruct-Turbo", "together");
+        addM("accounts/fireworks/models/llama-v3p3-70b-instruct", "fireworks");
+        addM("sonar-pro", "perplexity");
+        addM("llama3.1-70b", "cerebras");
+        addM("Meta-Llama-3.3-70B-Instruct", "sambanova");
+        addM("qwen2.5:0.5b", "ollama");
         addM("gpt-4o", "openai");
         addM("gpt-4o-mini", "openai");
 
@@ -148,6 +159,7 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
 
     const auto &keys = m_poolMgr->getKeys();
     QList<ApiKeyItem> activeKeys;
+
     for (const auto &k : keys) {
         if (k.enabled && !k.status.contains("Invalid")) {
             activeKeys.append(k);
@@ -184,12 +196,30 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
 
     if (pLower.contains("gemini")) {
         upstreamUrl = QUrl("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+    } else if (pLower.contains("yandex")) {
+        upstreamUrl = QUrl("https://llm.api.cloud.yandex.net/foundationModels/v1/chat/completions");
+    } else if (pLower.contains("deepseek")) {
+        upstreamUrl = QUrl("https://api.deepseek.com/chat/completions");
     } else if (pLower.contains("groq")) {
         upstreamUrl = QUrl("https://api.groq.com/openai/v1/chat/completions");
     } else if (pLower.contains("openrouter")) {
         upstreamUrl = QUrl("https://openrouter.ai/api/v1/chat/completions");
+    } else if (pLower.contains("mistral")) {
+        upstreamUrl = QUrl("https://api.mistral.ai/v1/chat/completions");
     } else if (pLower.contains("anthropic")) {
         upstreamUrl = QUrl("https://api.anthropic.com/v1/messages");
+    } else if (pLower.contains("together")) {
+        upstreamUrl = QUrl("https://api.together.xyz/v1/chat/completions");
+    } else if (pLower.contains("fireworks")) {
+        upstreamUrl = QUrl("https://api.fireworks.ai/inference/v1/chat/completions");
+    } else if (pLower.contains("perplexity")) {
+        upstreamUrl = QUrl("https://api.perplexity.ai/chat/completions");
+    } else if (pLower.contains("cerebras")) {
+        upstreamUrl = QUrl("https://api.cerebras.ai/v1/chat/completions");
+    } else if (pLower.contains("sambanova")) {
+        upstreamUrl = QUrl("https://api.sambanova.ai/v1/chat/completions");
+    } else if (pLower.contains("ollama")) {
+        upstreamUrl = QUrl("http://localhost:11434/v1/chat/completions");
     } else {
         upstreamUrl = QUrl("https://api.openai.com/v1/chat/completions");
     }
@@ -199,12 +229,30 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
     QString targetModel;
     if (pLower.contains("gemini")) {
         targetModel = m_poolMgr->getBestGeminiModel(selectedKey.key);
+    } else if (pLower.contains("yandex")) {
+        targetModel = "yandexgpt/latest";
+    } else if (pLower.contains("deepseek")) {
+        targetModel = "deepseek-chat";
     } else if (pLower.contains("groq")) {
         targetModel = "llama-3.3-70b-versatile";
     } else if (pLower.contains("openrouter")) {
         targetModel = "meta-llama/llama-3.3-70b-instruct";
+    } else if (pLower.contains("mistral")) {
+        targetModel = "mistral-small-latest";
     } else if (pLower.contains("anthropic")) {
         targetModel = "claude-3-5-sonnet-20241022";
+    } else if (pLower.contains("together")) {
+        targetModel = "meta-llama/Llama-3.3-70B-Instruct-Turbo";
+    } else if (pLower.contains("fireworks")) {
+        targetModel = "accounts/fireworks/models/llama-v3p3-70b-instruct";
+    } else if (pLower.contains("perplexity")) {
+        targetModel = "sonar-pro";
+    } else if (pLower.contains("cerebras")) {
+        targetModel = "llama3.1-70b";
+    } else if (pLower.contains("sambanova")) {
+        targetModel = "Meta-Llama-3.3-70B-Instruct";
+    } else if (pLower.contains("ollama")) {
+        targetModel = "qwen2.5:0.5b";
     } else {
         targetModel = "gpt-4o-mini";
     }
@@ -215,10 +263,7 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
     if (!jsonObj.isEmpty()) {
         QString reqModel = jsonObj["model"].toString().trimmed();
 
-        if (reqModel.isEmpty() || reqModel == "default" || reqModel == "custom/default" || reqModel == "auto" ||
-            (pLower.contains("gemini") && !reqModel.contains("gemini")) ||
-            (pLower.contains("groq") && !reqModel.contains("llama") && !reqModel.contains("mixtral") && !reqModel.contains("deepseek")) ||
-            (pLower.contains("openrouter") && !reqModel.contains("/"))) {
+        if (reqModel.isEmpty() || reqModel == "default" || reqModel == "custom/default" || reqModel == "auto") {
             jsonObj["model"] = targetModel;
         } else {
             targetModel = reqModel;
@@ -290,10 +335,8 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
     QNetworkRequest upRequest(upstreamUrl);
     upRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-    if (pLower.contains("gemini")) {
-        upRequest.setRawHeader("Authorization", QString("Bearer %1").arg(selectedKey.key).toUtf8());
-    } else if (pLower.contains("groq") || pLower.contains("openrouter")) {
-        upRequest.setRawHeader("Authorization", QString("Bearer %1").arg(selectedKey.key).toUtf8());
+    if (pLower.contains("yandex")) {
+        upRequest.setRawHeader("Authorization", QString("Api-Key %1").arg(selectedKey.key).toUtf8());
     } else if (pLower.contains("anthropic")) {
         upRequest.setRawHeader("x-api-key", selectedKey.key.toUtf8());
         upRequest.setRawHeader("anthropic-version", "2023-06-01");
