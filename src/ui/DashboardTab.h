@@ -28,12 +28,14 @@ private:
     QLabel *m_lblActiveKeysSub = nullptr;
     QLabel *m_lblRpmVal = nullptr;
     QLabel *m_lblTpmVal = nullptr;
+    QLabel *m_lblSessionTokensVal = nullptr;
     QLabel *m_lblFailoversVal = nullptr;
     QHBoxLayout *m_provCardsLayout = nullptr;
     QTableWidget *m_logTable = nullptr;
     int m_totalRequests = 0;
     int m_totalFailovers = 0;
     qint64 m_totalTokensServed = 0;
+    qint64 m_sessionTokens = 0;
 };
 
 #endif // DASHBOARDTAB_H

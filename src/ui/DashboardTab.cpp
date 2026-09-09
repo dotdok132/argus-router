@@ -40,6 +40,8 @@ QWidget* DashboardTab::createMetricCard(const QString &title, const QString &val
     if (title.contains("Active Keys")) {
         m_lblActiveKeysVal = lblVal;
         m_lblActiveKeysSub = lblSub;
+    } else if (title.contains("Session Tokens")) {
+        m_lblSessionTokensVal = lblVal;
     } else if (title.contains("RPM")) {
         m_lblRpmVal = lblVal;
     } else if (title.contains("TPM")) {
@@ -108,7 +110,7 @@ void DashboardTab::setupUi() {
     metricsLayout->setSpacing(8);
 
     metricsLayout->addWidget(createMetricCard("Total Pool RPM", "0 RPM", "0% Total Load"));
-    metricsLayout->addWidget(createMetricCard("Total Pool TPM", "0", "Token Bucket Active"));
+    metricsLayout->addWidget(createMetricCard("Session Tokens Used", "0 Tokens", "Live Session Tracker"));
     metricsLayout->addWidget(createMetricCard("Active Keys", "0 Active", "0 Providers"));
     metricsLayout->addWidget(createMetricCard("Rate Limits Handled", "0 Failovers", "0 Client Downtime"));
 
@@ -243,6 +245,10 @@ void DashboardTab::addLogEntry(const QString &time, const QString &clientIp, con
     m_totalRequests++;
     if (tokens > 0) {
         m_totalTokensServed += tokens;
+        m_sessionTokens += tokens;
+        if (m_lblSessionTokensVal) {
+            m_lblSessionTokensVal->setText(QString("%1 Tokens").arg(QLocale().toString(m_sessionTokens)));
+        }
         if (m_lblTpmVal) {
             m_lblTpmVal->setText(QString("%1 Served").arg(QLocale().toString(m_totalTokensServed)));
         }
