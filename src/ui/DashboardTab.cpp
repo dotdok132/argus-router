@@ -39,8 +39,11 @@ QWidget* DashboardTab::createMetricCard(const QString &title, const QString &val
 
     if (title.contains("Active Keys")) {
         m_lblActiveKeysVal = lblVal;
+        m_lblActiveKeysSub = lblSub;
     } else if (title.contains("RPM")) {
         m_lblRpmVal = lblVal;
+    } else if (title.contains("TPM")) {
+        m_lblTpmVal = lblVal;
     } else if (title.contains("Rate Limits")) {
         m_lblFailoversVal = lblVal;
     }
@@ -71,7 +74,11 @@ QWidget* DashboardTab::createProviderCard(const QString &providerName, const QSt
     lblName->setStyleSheet("font-size: 12px; font-weight: 600; color: #ffffff;");
 
     QLabel *lblStatus = new QLabel(statusText);
-    lblStatus->setStyleSheet("font-size: 10px; font-weight: 600; color: #4ec9b0; background: #1b382b; padding: 2px 5px; border-radius: 3px; font-family: monospace;");
+    if (statusText == "ACTIVE") {
+        lblStatus->setStyleSheet("font-size: 10px; font-weight: 600; color: #4ec9b0; background: #1b382b; padding: 2px 5px; border-radius: 3px; font-family: monospace;");
+    } else {
+        lblStatus->setStyleSheet("font-size: 10px; font-weight: 600; color: #858585; background: #2d2d2d; padding: 2px 5px; border-radius: 3px; font-family: monospace;");
+    }
 
     topLayout->addWidget(lblName);
     topLayout->addStretch();
@@ -100,8 +107,8 @@ void DashboardTab::setupUi() {
     QHBoxLayout *metricsLayout = new QHBoxLayout();
     metricsLayout->setSpacing(8);
 
-    metricsLayout->addWidget(createMetricCard("Total Pool RPM", "0 / 0", "0% Total Load"));
-    metricsLayout->addWidget(createMetricCard("Total Pool TPM", "1,000,000", "Token Bucket Active"));
+    metricsLayout->addWidget(createMetricCard("Total Pool RPM", "0 RPM", "0% Total Load"));
+    metricsLayout->addWidget(createMetricCard("Total Pool TPM", "0", "Token Bucket Active"));
     metricsLayout->addWidget(createMetricCard("Active Keys", "0 Active", "0 Providers"));
     metricsLayout->addWidget(createMetricCard("Rate Limits Handled", "0 Failovers", "0 Client Downtime"));
 
@@ -113,14 +120,10 @@ void DashboardTab::setupUi() {
     provLayout->setContentsMargins(10, 14, 10, 10);
     provLayout->setSpacing(8);
 
-    QHBoxLayout *pCardsLayout = new QHBoxLayout();
-    pCardsLayout->setSpacing(8);
+    m_provCardsLayout = new QHBoxLayout();
+    m_provCardsLayout->setSpacing(8);
 
-    pCardsLayout->addWidget(createProviderCard("Google Gemini", "Auto Model Engine", 100, "ACTIVE"));
-    pCardsLayout->addWidget(createProviderCard("Groq Speed Pool", "Llama-3.3 70B", 100, "ACTIVE"));
-    pCardsLayout->addWidget(createProviderCard("OpenRouter Auto-Free", "Auto Failover Pool", 100, "ACTIVE"));
-
-    provLayout->addLayout(pCardsLayout);
+    provLayout->addLayout(m_provCardsLayout);
     mainLayout->addWidget(grpProviders);
 
     // Live Request Traffic Table
@@ -153,22 +156,75 @@ void DashboardTab::setupUi() {
 
 void DashboardTab::refreshMetrics() {
     if (!m_poolMgr) return;
+
+    if (m_provCardsLayout) {
+        QLayoutItem *child;
+        while ((child = m_provCardsLayout->takeAt(0)) != nullptr) {
+            if (child->widget()) {
+                child->widget()->deleteLater();
+            }
+            delete child;
+        }
+    }
+
     const auto &keys = m_poolMgr->getKeys();
 
     int activeCount = 0;
     int totalRpm = 0;
+    int totalTpm = 0;
+
+    struct ProvInfo {
+        int totalKeys = 0;
+        int activeKeys = 0;
+        int totalRpm = 0;
+    };
+    QMap<QString, ProvInfo> provMap;
+
     for (const auto &k : keys) {
+        QString p = k.provider.isEmpty() ? "Custom" : k.provider;
+        if (p.toLower() == "gemini") p = "Google Gemini";
+        else if (p.toLower() == "openrouter") p = "OpenRouter";
+        else if (p.toLower() == "groq") p = "Groq";
+        else if (p.toLower() == "anthropic") p = "Anthropic";
+
+        provMap[p].totalKeys++;
         if (k.enabled) {
+            provMap[p].activeKeys++;
+            provMap[p].totalRpm += k.rpmLimit;
             activeCount++;
             totalRpm += k.rpmLimit;
+            totalTpm += k.tpmLimit;
         }
     }
 
     if (m_lblActiveKeysVal) {
         m_lblActiveKeysVal->setText(QString("%1 Active").arg(activeCount));
     }
+    if (m_lblActiveKeysSub) {
+        m_lblActiveKeysSub->setText(QString("%1 Providers").arg(provMap.size()));
+    }
     if (m_lblRpmVal) {
         m_lblRpmVal->setText(QString("%1 RPM").arg(totalRpm));
+    }
+    if (m_lblTpmVal) {
+        m_lblTpmVal->setText(QLocale().toString(totalTpm));
+    }
+
+    if (provMap.isEmpty()) {
+        QLabel *emptyLabel = new QLabel("No API keys configured yet. Add your first API key in the Key Pool tab.");
+        emptyLabel->setStyleSheet("color: #858585; font-size: 12px; font-style: italic; padding: 10px;");
+        m_provCardsLayout->addWidget(emptyLabel);
+    } else {
+        for (auto it = provMap.constBegin(); it != provMap.constEnd(); ++it) {
+            const QString &provName = it.key();
+            const ProvInfo &info = it.value();
+            QString statusText = info.activeKeys > 0 ? "ACTIVE" : "DISABLED";
+
+            int rpmPct = info.totalRpm > 0 ? 100 : 0;
+            QString keysSub = QString("%1 / %2 Keys Active").arg(info.activeKeys).arg(info.totalKeys);
+
+            m_provCardsLayout->addWidget(createProviderCard(provName, keysSub, rpmPct, statusText));
+        }
     }
 }
 

@@ -165,8 +165,17 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
         return;
     }
 
-    // Calculate actual index starting from Round-Robin
-    int targetIdx = (m_rrIndex + keyAttemptIndex) % activeKeys.size();
+    // Calculate target key index based on selected Queue Strategy
+    QueueStrategy strat = m_poolMgr->getQueueStrategy();
+    int targetIdx = 0;
+    if (strat == QueueStrategy::SequentialPriority) {
+        targetIdx = keyAttemptIndex % activeKeys.size();
+    } else if (strat == QueueStrategy::RoundRobin) {
+        targetIdx = (m_rrIndex + keyAttemptIndex) % activeKeys.size();
+    } else { // LeastLoaded
+        targetIdx = keyAttemptIndex % activeKeys.size();
+    }
+
     ApiKeyItem selectedKey = activeKeys[targetIdx];
 
     // Prepare Upstream Request
@@ -187,23 +196,23 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
 
     // Auto Model Alias Rewriter
     QByteArray payloadToSend = bodyData;
+    QString targetModel;
+    if (pLower.contains("gemini")) {
+        targetModel = m_poolMgr->getBestGeminiModel(selectedKey.key);
+    } else if (pLower.contains("groq")) {
+        targetModel = "llama-3.3-70b-versatile";
+    } else if (pLower.contains("openrouter")) {
+        targetModel = "meta-llama/llama-3.3-70b-instruct";
+    } else if (pLower.contains("anthropic")) {
+        targetModel = "claude-3-5-sonnet-20241022";
+    } else {
+        targetModel = "gpt-4o-mini";
+    }
+
     QJsonDocument jsonDoc = QJsonDocument::fromJson(bodyData);
     if (jsonDoc.isObject()) {
         QJsonObject jsonObj = jsonDoc.object();
         QString reqModel = jsonObj["model"].toString().trimmed();
-
-        QString targetModel;
-        if (pLower.contains("gemini")) {
-            targetModel = m_poolMgr->getBestGeminiModel(selectedKey.key);
-        } else if (pLower.contains("groq")) {
-            targetModel = "llama-3.3-70b-versatile";
-        } else if (pLower.contains("openrouter")) {
-            targetModel = "meta-llama/llama-3.3-70b-instruct";
-        } else if (pLower.contains("anthropic")) {
-            targetModel = "claude-3-5-sonnet-20241022";
-        } else {
-            targetModel = "gpt-4o-mini";
-        }
 
         if (reqModel.isEmpty() || reqModel == "default" || reqModel == "custom/default" || reqModel == "auto" ||
             (pLower.contains("gemini") && !reqModel.contains("gemini")) ||
@@ -211,8 +220,12 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
             (pLower.contains("openrouter") && !reqModel.contains("/"))) {
             jsonObj["model"] = targetModel;
             payloadToSend = QJsonDocument(jsonObj).toJson(QJsonDocument::Compact);
+        } else {
+            targetModel = reqModel;
         }
     }
+
+    QString logEndpoint = QString("%1 (%2)").arg(path, targetModel);
 
     QNetworkRequest upRequest(upstreamUrl);
     upRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
@@ -233,7 +246,7 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
 
     QNetworkReply *reply = m_netManager->post(upRequest, payloadToSend);
 
-    connect(reply, &QNetworkReply::finished, this, [this, socket, reply, timer, selectedKey, clientIp, path, bodyData, keyAttemptIndex, activeKeys]() {
+    connect(reply, &QNetworkReply::finished, this, [this, socket, reply, timer, selectedKey, clientIp, logEndpoint, bodyData, keyAttemptIndex, activeKeys]() {
         reply->deleteLater();
         qint64 latencyMs = timer->elapsed();
         delete timer;
@@ -253,7 +266,7 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
             emit logTraffic(
                 QDateTime::currentDateTime().toString("HH:mm:ss"),
                 clientIp,
-                path,
+                logEndpoint,
                 selectedKey.provider,
                 selectedKey.alias,
                 QString("%1 (Failover)").arg(statusCode),
@@ -261,7 +274,7 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
             );
 
             // Retry seamlessly with next key attempt
-            forwardChatCompletion(socket, bodyData, clientIp, path, keyAttemptIndex + 1);
+            forwardChatCompletion(socket, bodyData, clientIp, logEndpoint, keyAttemptIndex + 1);
             return;
         }
 
@@ -273,7 +286,7 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
         emit logTraffic(
             QDateTime::currentDateTime().toString("HH:mm:ss"),
             clientIp,
-            path,
+            logEndpoint,
             selectedKey.provider,
             selectedKey.alias,
             QString("%1 OK").arg(statusCode),

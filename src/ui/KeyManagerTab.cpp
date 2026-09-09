@@ -5,6 +5,7 @@
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QLabel>
+#include <QComboBox>
 
 KeyManagerTab::KeyManagerTab(KeyPoolManager *poolMgr, QWidget *parent)
     : QWidget(parent), m_poolMgr(poolMgr) {
@@ -45,10 +46,30 @@ void KeyManagerTab::setupUi() {
     toolbar->addWidget(btnResetPenalties);
     toolbar->addStretch();
 
+    QLabel *lblQueue = new QLabel("Failover Strategy:");
+    lblQueue->setStyleSheet("color: #858585; font-size: 11px; font-weight: 600;");
+    
+    QComboBox *comboStrat = new QComboBox();
+    comboStrat->addItem("Sequential Priority Queue");
+    comboStrat->addItem("Round-Robin Rotation");
+    comboStrat->addItem("Least Loaded Capacity");
+    comboStrat->setFixedWidth(190);
+    if (m_poolMgr) {
+        comboStrat->setCurrentIndex(static_cast<int>(m_poolMgr->getQueueStrategy()));
+    }
+    connect(comboStrat, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx) {
+        if (m_poolMgr) {
+            m_poolMgr->setQueueStrategy(static_cast<QueueStrategy>(idx));
+        }
+    });
+
+    toolbar->addWidget(lblQueue);
+    toolbar->addWidget(comboStrat);
+
     mainLayout->addLayout(toolbar);
 
     // Keys Table Group
-    QGroupBox *grpKeys = new QGroupBox("API Key Pool Configuration");
+    QGroupBox *grpKeys = new QGroupBox("API Key Pool Configuration & Failover Order");
     QVBoxLayout *tableLayout = new QVBoxLayout(grpKeys);
     tableLayout->setContentsMargins(10, 14, 10, 10);
 
@@ -71,7 +92,7 @@ void KeyManagerTab::setupUi() {
     hdr->setSectionResizeMode(5, QHeaderView::ResizeToContents); // TPM Limit
     hdr->setSectionResizeMode(6, QHeaderView::ResizeToContents); // Priority
     hdr->setSectionResizeMode(7, QHeaderView::Fixed);            // Actions column (fixed width for buttons)
-    m_keysTable->setColumnWidth(7, 230);
+    m_keysTable->setColumnWidth(7, 300);
 
     m_keysTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_keysTable->setAlternatingRowColors(true);
@@ -95,8 +116,10 @@ void KeyManagerTab::refreshTable() {
     m_keysTable->setRowCount(0);
 
     const auto &keys = m_poolMgr->getKeys();
-    for (const auto &k : keys) {
-        int r = m_keysTable->rowCount();
+    int totalKeys = keys.size();
+
+    for (int r = 0; r < totalKeys; ++r) {
+        const auto &k = keys[r];
         m_keysTable->insertRow(r);
 
         m_keysTable->setItem(r, 0, new QTableWidgetItem(k.provider));
@@ -143,12 +166,24 @@ void KeyManagerTab::refreshTable() {
             }
         }
 
-        // Action Cell Widget with Test, Disable and Delete Buttons
+        // Action Cell Widget with Queue Move Up/Down, Test, Disable and Delete Buttons
         QWidget *actionWidget = new QWidget();
         actionWidget->setObjectName("ActionCellWidget");
         QHBoxLayout *actLayout = new QHBoxLayout(actionWidget);
         actLayout->setContentsMargins(4, 4, 4, 4);
-        actLayout->setSpacing(6);
+        actLayout->setSpacing(4);
+
+        QPushButton *btnUp = new QPushButton("^");
+        btnUp->setObjectName("TableGhostButton");
+        btnUp->setFixedWidth(24);
+        btnUp->setToolTip("Move key UP in failover queue");
+        if (r == 0) btnUp->setEnabled(false);
+
+        QPushButton *btnDown = new QPushButton("v");
+        btnDown->setObjectName("TableGhostButton");
+        btnDown->setFixedWidth(24);
+        btnDown->setToolTip("Move key DOWN in failover queue");
+        if (r == totalKeys - 1) btnDown->setEnabled(false);
 
         QPushButton *btnTest = new QPushButton("Test");
         btnTest->setObjectName("TableGhostAccent");
@@ -164,6 +199,14 @@ void KeyManagerTab::refreshTable() {
         btnDelete->setCursor(Qt::PointingHandCursor);
 
         QString keyId = k.id;
+        connect(btnUp, &QPushButton::clicked, this, [this, r]() {
+            if (m_poolMgr) m_poolMgr->moveKeyUp(r);
+        });
+
+        connect(btnDown, &QPushButton::clicked, this, [this, r]() {
+            if (m_poolMgr) m_poolMgr->moveKeyDown(r);
+        });
+
         connect(btnTest, &QPushButton::clicked, this, [this, keyId]() {
             if (m_poolMgr) m_poolMgr->testKey(keyId);
         });
@@ -176,6 +219,8 @@ void KeyManagerTab::refreshTable() {
             if (m_poolMgr) m_poolMgr->removeKey(keyId);
         });
 
+        actLayout->addWidget(btnUp);
+        actLayout->addWidget(btnDown);
         actLayout->addWidget(btnTest);
         actLayout->addWidget(btnToggle);
         actLayout->addWidget(btnDelete);

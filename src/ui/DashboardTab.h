@@ -5,6 +5,7 @@
 #include <QTableWidget>
 #include <QProgressBar>
 #include <QLabel>
+#include <QHBoxLayout>
 #include "../core/KeyPoolManager.h"
 
 class DashboardTab : public QWidget {
@@ -23,10 +24,13 @@ private:
     QWidget* createProviderCard(const QString &providerName, const QString &activeKeysStr, int rpmPct, const QString &statusText);
     
     KeyPoolManager *m_poolMgr;
-    QLabel *m_lblActiveKeysVal;
-    QLabel *m_lblRpmVal;
-    QLabel *m_lblFailoversVal;
-    QTableWidget *m_logTable;
+    QLabel *m_lblActiveKeysVal = nullptr;
+    QLabel *m_lblActiveKeysSub = nullptr;
+    QLabel *m_lblRpmVal = nullptr;
+    QLabel *m_lblTpmVal = nullptr;
+    QLabel *m_lblFailoversVal = nullptr;
+    QHBoxLayout *m_provCardsLayout = nullptr;
+    QTableWidget *m_logTable = nullptr;
     int m_totalRequests = 0;
     int m_totalFailovers = 0;
 };

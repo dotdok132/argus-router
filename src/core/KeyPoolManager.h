@@ -23,6 +23,12 @@ struct ApiKeyItem {
     bool isDuplicate = false;
 };
 
+enum class QueueStrategy {
+    SequentialPriority = 0, // Top-to-bottom failover queue
+    RoundRobin = 1,          // Cyclic load distribution
+    LeastLoaded = 2          // Capacity-based selection
+};
+
 class KeyPoolManager : public QObject {
     Q_OBJECT
 
@@ -33,6 +39,12 @@ public:
     void addKey(const ApiKeyItem &item);
     void removeKey(const QString &id);
     void toggleKey(const QString &id, bool enabled);
+
+    QueueStrategy getQueueStrategy() const { return m_queueStrategy; }
+    void setQueueStrategy(QueueStrategy strategy);
+
+    void moveKeyUp(int index);
+    void moveKeyDown(int index);
 
     bool isDuplicateKey(const QString &keyStr, const QString &ignoreId = "") const;
 
@@ -55,6 +67,7 @@ private:
     QString getDefaultConfigPath() const;
 
     QList<ApiKeyItem> m_keys;
+    QueueStrategy m_queueStrategy = QueueStrategy::SequentialPriority;
     QNetworkAccessManager *m_netManager;
     QHash<QString, qint64> m_lastTestTimes; // Anti-spam test fuse (timestamp in msecs)
     QHash<QString, QStringList> m_geminiDiscoveredModels;

@@ -92,6 +92,30 @@ void KeyPoolManager::toggleKey(const QString &id, bool enabled) {
     emit keysUpdated();
 }
 
+void KeyPoolManager::setQueueStrategy(QueueStrategy strategy) {
+    if (m_queueStrategy != strategy) {
+        m_queueStrategy = strategy;
+        saveToDisk();
+        emit keysUpdated();
+    }
+}
+
+void KeyPoolManager::moveKeyUp(int index) {
+    if (index > 0 && index < m_keys.size()) {
+        m_keys.swapItemsAt(index, index - 1);
+        saveToDisk();
+        emit keysUpdated();
+    }
+}
+
+void KeyPoolManager::moveKeyDown(int index) {
+    if (index >= 0 && index < m_keys.size() - 1) {
+        m_keys.swapItemsAt(index, index + 1);
+        saveToDisk();
+        emit keysUpdated();
+    }
+}
+
 void KeyPoolManager::loadFromDisk(const QString &filePath) {
     QString path = filePath.isEmpty() ? getDefaultConfigPath() : filePath;
     QFile file(path);
@@ -103,10 +127,19 @@ void KeyPoolManager::loadFromDisk(const QString &filePath) {
     file.close();
 
     QJsonDocument doc = QJsonDocument::fromJson(data);
-    if (!doc.isArray()) return;
+    QJsonArray array;
+
+    if (doc.isObject()) {
+        QJsonObject root = doc.object();
+        m_queueStrategy = static_cast<QueueStrategy>(root["queueStrategy"].toInt(0));
+        array = root["keys"].toArray();
+    } else if (doc.isArray()) {
+        array = doc.array();
+    } else {
+        return;
+    }
 
     m_keys.clear();
-    QJsonArray array = doc.array();
     for (const auto &val : array) {
         QJsonObject obj = val.toObject();
         ApiKeyItem item;
@@ -129,8 +162,10 @@ void KeyPoolManager::loadFromDisk(const QString &filePath) {
 
 void KeyPoolManager::saveToDisk(const QString &filePath) const {
     QString path = filePath.isEmpty() ? getDefaultConfigPath() : filePath;
-    QJsonArray array;
+    QJsonObject root;
+    root["queueStrategy"] = static_cast<int>(m_queueStrategy);
 
+    QJsonArray array;
     for (const auto &item : m_keys) {
         QJsonObject obj;
         obj["id"] = item.id;
@@ -144,8 +179,9 @@ void KeyPoolManager::saveToDisk(const QString &filePath) const {
         obj["enabled"] = item.enabled;
         array.append(obj);
     }
+    root["keys"] = array;
 
-    QJsonDocument doc(array);
+    QJsonDocument doc(root);
     QFile file(path);
     if (file.open(QIODevice::WriteOnly)) {
         file.write(doc.toJson(QJsonDocument::Indented));
