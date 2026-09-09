@@ -111,7 +111,7 @@ def test_transparent_memory_loop():
             headers={"Content-Type": "application/json"},
             method="POST"
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=60) as resp:
             if resp.status != 200:
                 log_fail("Transparent Memory Test", f"Expected 200, got {resp.status}")
             

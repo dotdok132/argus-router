@@ -126,6 +126,7 @@ void HttpProxyServer::processSocket(QTcpSocket *socket) {
         addM("summarization/latest", "yandex");
         addM("deepseek-chat", "deepseek");
         addM("deepseek-reasoner", "deepseek");
+        addM("deepseek-coder", "deepseek");
         addM("llama-3.3-70b-versatile", "groq");
         addM("meta-llama/llama-3.3-70b-instruct", "openrouter");
         addM("mistral-small-latest", "mistral");
