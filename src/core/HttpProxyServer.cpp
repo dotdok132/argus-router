@@ -285,6 +285,10 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
                                    lastUserText.contains("кто я") || lastUserText.contains("стек") ||
                                    lastUserText.contains("проект") || lastUserText.contains("требовани") ||
                                    lastUserText.contains("файлы") || lastUserText.contains("характер") ||
+                                   lastUserText.contains("запомни") || lastUserText.contains("сохрани") ||
+                                   lastUserText.contains("запиши") || lastUserText.contains("обнови") ||
+                                   lastUserText.contains("добавь") || lastUserText.contains("save") ||
+                                   lastUserText.contains("remember") || lastUserText.contains("store") ||
                                    lastUserText.contains("memory") || lastUserText.contains("context") ||
                                    lastUserText.contains("user") || lastUserText.contains("identity");
 
@@ -320,10 +324,35 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
                     listMemTool["function"] = listMemFn;
                     toolsArray.append(listMemTool);
 
+                    QJsonObject saveMemTool;
+                    saveMemTool["type"] = "function";
+                    QJsonObject saveMemFn;
+                    saveMemFn["name"] = "save_memory";
+                    saveMemFn["description"] = "Save or update a memory file (.md) in the local memory library. Call this whenever the user asks to remember, save, record, or update facts, preferences, identity, or project rules.";
+                    QJsonObject saveMemParams;
+                    saveMemParams["type"] = "object";
+                    QJsonObject saveMemProps;
+                    QJsonObject nameP;
+                    nameP["type"] = "string";
+                    nameP["description"] = "The file name of the memory module, e.g. 'user_character.md' or 'code_requirements.md'.";
+                    QJsonObject contentP;
+                    contentP["type"] = "string";
+                    contentP["description"] = "The full text content to write to the memory file.";
+                    saveMemProps["name"] = nameP;
+                    saveMemProps["content"] = contentP;
+                    saveMemParams["properties"] = saveMemProps;
+                    QJsonArray reqSaveArray;
+                    reqSaveArray.append("name");
+                    reqSaveArray.append("content");
+                    saveMemParams["required"] = reqSaveArray;
+                    saveMemFn["parameters"] = saveMemParams;
+                    saveMemTool["function"] = saveMemFn;
+                    toolsArray.append(saveMemTool);
+
                     jsonObj["tools"] = toolsArray;
                 }
 
-                QString memInstruction = "You have access to a local memory library via tools ('get_memory', 'list_memories'). When the user asks about user identity, preferences, code requirements, or project context, automatically call get_memory or list_memories to inspect memory files before answering.";
+                QString memInstruction = "You have access to a local memory library via tools ('get_memory', 'list_memories', 'save_memory'). When the user asks you to remember something, save information, update preferences, or when you learn important details, call save_memory to write it immediately to a memory file (e.g. 'user_character.md').";
 
                 bool sysFound = false;
                 if (!messages.isEmpty()) {
@@ -465,6 +494,37 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
                                     QStringList files = m_memMgr->listMemories();
                                     toolResultStr = QString("Available Memory Modules: %1").arg(files.join(", "));
                                     qDebug() << "[Argus Memory] Executed list_memories()";
+                                } else if (fnName == "save_memory") {
+                                    QJsonDocument argDoc = QJsonDocument::fromJson(fnArgs.toUtf8());
+                                    QString memName;
+                                    QString memContent;
+                                    if (argDoc.isObject()) {
+                                        QJsonObject argObj = argDoc.object();
+                                        if (argObj.contains("name")) memName = argObj["name"].toString();
+                                        else if (argObj.contains("file_name")) memName = argObj["file_name"].toString();
+                                        else if (argObj.contains("filename")) memName = argObj["filename"].toString();
+                                        else if (argObj.contains("file")) memName = argObj["file"].toString();
+
+                                        if (argObj.contains("content")) memContent = argObj["content"].toString();
+                                        else if (argObj.contains("text")) memContent = argObj["text"].toString();
+                                        else if (argObj.contains("data")) memContent = argObj["data"].toString();
+                                    }
+                                    memName = memName.trimmed();
+                                    if (memName.isEmpty()) {
+                                        memName = "user_character.md";
+                                    }
+                                    if (!memName.endsWith(".md")) {
+                                        memName += ".md";
+                                    }
+
+                                    bool saved = m_memMgr->saveMemory(memName, memContent);
+                                    if (saved) {
+                                        toolResultStr = QString("Successfully saved memory file '%1'.").arg(memName);
+                                        qDebug() << "[Argus Memory] Executed save_memory(" << memName << ")";
+                                    } else {
+                                        toolResultStr = QString("Failed to save memory file '%1'.").arg(memName);
+                                        qWarning() << "[Argus Memory] Failed save_memory(" << memName << ")";
+                                    }
                                 } else {
                                     toolResultStr = "Unknown tool.";
                                 }
