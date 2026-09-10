@@ -119,11 +119,6 @@ void HttpProxyServer::processSocket(QTcpSocket *socket) {
         addM("default", "argus");
         addM("auto", "argus");
         addM("gemini-3.6-flash", "google");
-        addM("yandexgpt/latest", "yandex");
-        addM("yandexgpt-lite/latest", "yandex");
-        addM("yandexgpt-3/latest", "yandex");
-        addM("yandexgpt-3-lite/latest", "yandex");
-        addM("summarization/latest", "yandex");
         addM("deepseek-chat", "deepseek");
         addM("deepseek-reasoner", "deepseek");
         addM("deepseek-coder", "deepseek");
@@ -200,8 +195,6 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
 
     if (pLower.contains("gemini")) {
         upstreamUrl = QUrl("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
-    } else if (pLower.contains("yandex")) {
-        upstreamUrl = QUrl("https://llm.api.cloud.yandex.net/foundationModels/v1/chat/completions");
     } else if (pLower.contains("deepseek")) {
         upstreamUrl = QUrl("https://api.deepseek.com/chat/completions");
     } else if (pLower.contains("groq")) {
@@ -233,8 +226,6 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
     QString targetModel;
     if (pLower.contains("gemini")) {
         targetModel = m_poolMgr->getBestGeminiModel(selectedKey.key);
-    } else if (pLower.contains("yandex")) {
-        targetModel = "yandexgpt/latest";
     } else if (pLower.contains("deepseek")) {
         targetModel = "deepseek-chat";
     } else if (pLower.contains("groq")) {
@@ -267,7 +258,11 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
     if (!jsonObj.isEmpty()) {
         QString reqModel = jsonObj["model"].toString().trimmed();
 
-        if (reqModel.isEmpty() || reqModel == "default" || reqModel == "custom/default" || reqModel == "auto") {
+        if (reqModel.isEmpty() || reqModel == "default" || reqModel == "custom/default" || reqModel == "auto" ||
+            (pLower.contains("gemini") && !reqModel.contains("gemini")) ||
+            (pLower.contains("deepseek") && !reqModel.contains("deepseek")) ||
+            (pLower.contains("groq") && !reqModel.contains("llama") && !reqModel.contains("mixtral") && !reqModel.contains("gemma")) ||
+            (pLower.contains("openrouter") && !reqModel.contains("/"))) {
             jsonObj["model"] = targetModel;
         } else {
             targetModel = reqModel;
@@ -339,9 +334,7 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
     QNetworkRequest upRequest(upstreamUrl);
     upRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-    if (pLower.contains("yandex")) {
-        upRequest.setRawHeader("Authorization", QString("Api-Key %1").arg(selectedKey.key).toUtf8());
-    } else if (pLower.contains("anthropic")) {
+    if (pLower.contains("anthropic")) {
         upRequest.setRawHeader("x-api-key", selectedKey.key.toUtf8());
         upRequest.setRawHeader("anthropic-version", "2023-06-01");
     } else {
@@ -407,12 +400,32 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
                                     QJsonDocument argDoc = QJsonDocument::fromJson(fnArgs.toUtf8());
                                     QString memName;
                                     if (argDoc.isObject()) {
-                                        memName = argDoc.object()["name"].toString();
+                                        QJsonObject argObj = argDoc.object();
+                                        if (argObj.contains("name")) memName = argObj["name"].toString();
+                                        else if (argObj.contains("file_name")) memName = argObj["file_name"].toString();
+                                        else if (argObj.contains("filename")) memName = argObj["filename"].toString();
+                                        else if (argObj.contains("file")) memName = argObj["file"].toString();
+                                        else memName = fnArgs;
                                     } else {
                                         memName = fnArgs;
                                     }
+                                    memName = memName.trimmed();
+                                    if (memName.isEmpty() || memName == "{}" || memName.startsWith("{")) {
+                                        QStringList available = m_memMgr->listMemories();
+                                        if (!available.isEmpty()) {
+                                            memName = available.first();
+                                        }
+                                    }
 
                                     QString content = m_memMgr->readMemory(memName);
+                                    if (content.isEmpty()) {
+                                        QStringList files = m_memMgr->listMemories();
+                                        if (!files.isEmpty()) {
+                                            content = m_memMgr->readMemory(files.first());
+                                            memName = files.first();
+                                        }
+                                    }
+
                                     if (content.isEmpty()) {
                                         toolResultStr = QString("Memory module '%1' not found.").arg(memName);
                                     } else {
@@ -434,6 +447,9 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
                                 messages.append(toolRespMsg);
                             }
 
+                            if (toolDepth >= 2) {
+                                updatedJson["tool_choice"] = "none";
+                            }
                             updatedJson["messages"] = messages;
                             QByteArray updatedPayload = QJsonDocument(updatedJson).toJson(QJsonDocument::Compact);
 
@@ -454,9 +470,8 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
             m_poolMgr->recordTokenUsage(selectedKey.id, totalTokens);
         }
 
-        // If upstream error (429 Rate Limit, 503 Service Unavailable, 502 Bad Gateway, 401 Invalid Key, 500 Server Error):
-        // Automatically failover to next key in pool!
-        if (statusCode == 429 || statusCode == 503 || statusCode == 502 || statusCode == 401 || statusCode == 500) {
+        // If upstream error (4xx or 5xx): Automatically failover to next key in pool!
+        if (statusCode >= 400 && keyAttemptIndex + 1 < activeKeys.size()) {
             qWarning() << "[Argus Failover] Key" << selectedKey.alias << "(" << selectedKey.provider << ") failed with status" << statusCode << "- Failing over to next key!";
             
             emit logTraffic(
@@ -471,7 +486,7 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
             );
 
             // Retry seamlessly with next key attempt
-            forwardChatCompletion(socket, bodyData, clientIp, logEndpoint, keyAttemptIndex + 1, toolDepth);
+            forwardChatCompletion(socket, bodyData, clientIp, path, keyAttemptIndex + 1, toolDepth);
             return;
         }
 

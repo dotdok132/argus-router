@@ -33,7 +33,6 @@ void AddKeyDialog::setupUi() {
 
     m_comboProvider = new QComboBox();
     m_comboProvider->addItem("Google Gemini", "gemini");
-    m_comboProvider->addItem("Yandex AI Studio", "yandex");
     m_comboProvider->addItem("DeepSeek API", "deepseek");
     m_comboProvider->addItem("Groq Speed Pool", "groq");
     m_comboProvider->addItem("OpenRouter Auto-Free", "openrouter");
@@ -52,7 +51,7 @@ void AddKeyDialog::setupUi() {
 
     m_editKey = new QLineEdit();
     m_editKey->setEchoMode(QLineEdit::Password);
-    m_editKey->setPlaceholderText("Paste API key here (AIza... / AQVN... / sk-...)");
+    m_editKey->setPlaceholderText("Paste API key here (AIza... / sk-...)");
     connect(m_editKey, &QLineEdit::textChanged, this, &AddKeyDialog::checkDuplicateKey);
 
     m_spinRpm = new QSpinBox();
@@ -76,8 +75,6 @@ void AddKeyDialog::setupUi() {
         QString p = m_comboProvider->currentData().toString();
         if (p == "gemini") {
             m_editAlias->setText("Gemini Key");
-        } else if (p == "yandex") {
-            m_editAlias->setText("Yandex AI Studio Key");
         } else if (p == "deepseek") {
             m_editAlias->setText("DeepSeek Key");
         } else if (p == "groq") {

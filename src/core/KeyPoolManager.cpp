@@ -329,9 +329,6 @@ void KeyPoolManager::testKey(const QString &id) {
     if (prov.contains("gemini")) {
         QUrl url(QString("https://generativelanguage.googleapis.com/v1beta/models?key=%1").arg(item.key));
         request.setUrl(url);
-    } else if (prov.contains("yandex")) {
-        request.setUrl(QUrl("https://llm.api.cloud.yandex.net/foundationModels/v1/models"));
-        request.setRawHeader("Authorization", QString("Api-Key %1").arg(item.key).toUtf8());
     } else if (prov.contains("deepseek")) {
         request.setUrl(QUrl("https://api.deepseek.com/models"));
         request.setRawHeader("Authorization", QString("Bearer %1").arg(item.key).toUtf8());
@@ -418,9 +415,6 @@ void KeyPoolManager::testKey(const QString &id) {
                 if (pLower.contains("gemini")) {
                     k.rpmLimit = 15;
                     k.tpmLimit = 1000000;
-                } else if (pLower.contains("yandex")) {
-                    k.rpmLimit = 60;
-                    k.tpmLimit = 300000;
                 } else if (pLower.contains("deepseek")) {
                     k.rpmLimit = 60;
                     k.tpmLimit = 200000;
