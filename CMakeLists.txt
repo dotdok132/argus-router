@@ -19,6 +19,7 @@ set(SOURCES
     src/core/MemoryManager.cpp
     src/ui/MainWindow.cpp
     src/ui/DashboardTab.cpp
+    src/ui/ChatTab.cpp
     src/ui/KeyManagerTab.cpp
     src/ui/MemoryTab.cpp
     src/ui/SettingsTab.cpp
@@ -31,6 +32,7 @@ set(HEADERS
     src/core/MemoryManager.h
     src/ui/MainWindow.h
     src/ui/DashboardTab.h
+    src/ui/ChatTab.h
     src/ui/KeyManagerTab.h
     src/ui/MemoryTab.h
     src/ui/SettingsTab.h

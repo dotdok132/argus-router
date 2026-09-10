@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "DashboardTab.h"
+#include "ChatTab.h"
 #include "KeyManagerTab.h"
 #include "MemoryTab.h"
 #include "SettingsTab.h"
@@ -44,7 +45,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
     mainLayout->addWidget(headerBar);
 
-    // Main Tabs Widget (Overview, Key Pool, Memory (.md), Settings)
+    // Main Tabs Widget (Overview, AI Chat, Key Pool, Memory (.md), Settings)
     m_tabs = new QTabWidget(this);
     m_tabs->setContentsMargins(8, 8, 8, 8);
 
@@ -52,6 +53,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     connect(m_proxyServer, &HttpProxyServer::logTraffic, dashTab, &DashboardTab::addLogEntry);
 
     m_tabs->addTab(dashTab, "Overview");
+    m_tabs->addTab(new ChatTab(m_poolMgr, this), "AI Chat");
     m_tabs->addTab(new KeyManagerTab(m_poolMgr, this), "Key Pool");
     m_tabs->addTab(new MemoryTab(m_memMgr, this), "Memory (.md)");
     m_tabs->addTab(new SettingsTab(this), "Settings");
