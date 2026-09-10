@@ -216,6 +216,9 @@ void ChatTab::onRequestFinished(QNetworkReply *reply) {
     QJsonObject messageObj = firstChoice["message"].toObject();
 
     QString contentStr = messageObj["content"].toString();
+    if (contentStr.isEmpty() && messageObj.contains("reasoning")) {
+        contentStr = messageObj["reasoning"].toString();
+    }
     if (contentStr.isEmpty()) {
         contentStr = "(No text response generated)";
     }
