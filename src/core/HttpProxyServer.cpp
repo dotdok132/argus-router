@@ -281,16 +281,20 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
             }
 
             QString reqM = jsonObj["model"].toString().toLower();
-            bool needMemoryTools = lastUserText.contains("память") || lastUserText.contains("воспоминани") ||
+            bool needMemoryTools = (reqM == "auto" || reqM == "default") ||
+                                   lastUserText.contains("память") || lastUserText.contains("воспоминани") ||
                                    lastUserText.contains("кто я") || lastUserText.contains("стек") ||
                                    lastUserText.contains("проект") || lastUserText.contains("требовани") ||
                                    lastUserText.contains("файлы") || lastUserText.contains("характер") ||
                                    lastUserText.contains("запомни") || lastUserText.contains("сохрани") ||
                                    lastUserText.contains("запиши") || lastUserText.contains("обнови") ||
-                                   lastUserText.contains("добавь") || lastUserText.contains("save") ||
-                                   lastUserText.contains("remember") || lastUserText.contains("store") ||
-                                   lastUserText.contains("memory") || lastUserText.contains("context") ||
-                                   lastUserText.contains("user") || lastUserText.contains("identity");
+                                   lastUserText.contains("добавь") || lastUserText.contains("люблю") ||
+                                   lastUserText.contains("нравится") || lastUserText.contains("предпочита") ||
+                                   lastUserText.contains("save") || lastUserText.contains("remember") ||
+                                   lastUserText.contains("store") || lastUserText.contains("memory") ||
+                                   lastUserText.contains("context") || lastUserText.contains("user") ||
+                                   lastUserText.contains("identity") || lastUserText.contains("like") ||
+                                   lastUserText.contains("prefer");
 
             if (needMemoryTools) {
                 if (!jsonObj.contains("tools")) {
@@ -328,7 +332,7 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
                     saveMemTool["type"] = "function";
                     QJsonObject saveMemFn;
                     saveMemFn["name"] = "save_memory";
-                    saveMemFn["description"] = "Save or update a memory file (.md) in the local memory library. Call this whenever the user asks to remember, save, record, or update facts, preferences, identity, or project rules.";
+                    saveMemFn["description"] = "Save or update a memory file (.md) in the local memory library. Call this whenever the user expresses a preference, fact, identity detail, or asks to save/remember information.";
                     QJsonObject saveMemParams;
                     saveMemParams["type"] = "object";
                     QJsonObject saveMemProps;
@@ -337,7 +341,7 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
                     nameP["description"] = "The file name of the memory module, e.g. 'user_character.md' or 'code_requirements.md'.";
                     QJsonObject contentP;
                     contentP["type"] = "string";
-                    contentP["description"] = "The full text content to write to the memory file.";
+                    contentP["description"] = "The full updated text content to write to the memory file.";
                     saveMemProps["name"] = nameP;
                     saveMemProps["content"] = contentP;
                     saveMemParams["properties"] = saveMemProps;
@@ -352,7 +356,7 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
                     jsonObj["tools"] = toolsArray;
                 }
 
-                QString memInstruction = "You have access to a local memory library via tools ('get_memory', 'list_memories', 'save_memory'). When the user asks you to remember something, save information, update preferences, or when you learn important details, call save_memory to write it immediately to a memory file (e.g. 'user_character.md').";
+                QString memInstruction = "You have access to a local memory library via tools ('get_memory', 'list_memories', 'save_memory'). Whenever the user mentions a personal fact, preference, habit, or interest (e.g. 'я люблю...', 'мне нравится...'), or asks to remember something, you MUST automatically call save_memory to update 'user_character.md' or the appropriate memory file.";
 
                 bool sysFound = false;
                 if (!messages.isEmpty()) {
