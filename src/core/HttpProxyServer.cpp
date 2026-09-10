@@ -270,60 +270,81 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
 
         // Inject Memory Tool Schemas & System Instruction on initial request (toolDepth == 0)
         if (m_memMgr != nullptr && toolDepth == 0) {
-            if (!jsonObj.contains("tools")) {
-                QJsonArray toolsArray;
-
-                QJsonObject getMemTool;
-                getMemTool["type"] = "function";
-                QJsonObject getMemFn;
-                getMemFn["name"] = "get_memory";
-                getMemFn["description"] = "Read the contents of a specific memory .md file from the local library.";
-                QJsonObject getMemParams;
-                getMemParams["type"] = "object";
-                QJsonObject getMemProps;
-                QJsonObject nameProp;
-                nameProp["type"] = "string";
-                nameProp["description"] = "The file name of the memory module, e.g. 'code_requirements.md' or 'user_character.md'.";
-                getMemProps["name"] = nameProp;
-                getMemParams["properties"] = getMemProps;
-                QJsonArray reqArray;
-                reqArray.append("name");
-                getMemParams["required"] = reqArray;
-                getMemFn["parameters"] = getMemParams;
-                getMemTool["function"] = getMemFn;
-                toolsArray.append(getMemTool);
-
-                QJsonObject listMemTool;
-                listMemTool["type"] = "function";
-                QJsonObject listMemFn;
-                listMemFn["name"] = "list_memories";
-                listMemFn["description"] = "List all available memory .md files in the local memory library.";
-                listMemTool["function"] = listMemFn;
-                toolsArray.append(listMemTool);
-
-                jsonObj["tools"] = toolsArray;
-            }
-
             QJsonArray messages = jsonObj["messages"].toArray();
-            QString memInstruction = "You have access to a local memory library via tools ('get_memory', 'list_memories'). When the user asks about user identity, preferences, code requirements, or project context, automatically call get_memory or list_memories to inspect memory files before answering.";
-
-            bool sysFound = false;
-            if (!messages.isEmpty()) {
-                QJsonObject firstMsg = messages[0].toObject();
-                if (firstMsg["role"].toString() == "system") {
-                    QString existingContent = firstMsg["content"].toString();
-                    firstMsg["content"] = existingContent + "\n\n" + memInstruction;
-                    messages[0] = firstMsg;
-                    sysFound = true;
+            QString lastUserText;
+            for (int i = messages.size() - 1; i >= 0; --i) {
+                QJsonObject m = messages[i].toObject();
+                if (m["role"].toString() == "user") {
+                    lastUserText = m["content"].toString().toLower();
+                    break;
                 }
             }
-            if (!sysFound) {
-                QJsonObject sysMsg;
-                sysMsg["role"] = "system";
-                sysMsg["content"] = memInstruction;
-                messages.prepend(sysMsg);
+
+            QString reqM = jsonObj["model"].toString().toLower();
+            bool needMemoryTools = lastUserText.contains("память") || lastUserText.contains("воспоминани") ||
+                                   lastUserText.contains("кто я") || lastUserText.contains("стек") ||
+                                   lastUserText.contains("проект") || lastUserText.contains("требовани") ||
+                                   lastUserText.contains("файлы") || lastUserText.contains("характер") ||
+                                   lastUserText.contains("memory") || lastUserText.contains("context") ||
+                                   lastUserText.contains("user") || lastUserText.contains("identity");
+
+            if (needMemoryTools) {
+                if (!jsonObj.contains("tools")) {
+                    QJsonArray toolsArray;
+
+                    QJsonObject getMemTool;
+                    getMemTool["type"] = "function";
+                    QJsonObject getMemFn;
+                    getMemFn["name"] = "get_memory";
+                    getMemFn["description"] = "Read the contents of a specific memory .md file from the local library.";
+                    QJsonObject getMemParams;
+                    getMemParams["type"] = "object";
+                    QJsonObject getMemProps;
+                    QJsonObject nameProp;
+                    nameProp["type"] = "string";
+                    nameProp["description"] = "The file name of the memory module, e.g. 'code_requirements.md' or 'user_character.md'.";
+                    getMemProps["name"] = nameProp;
+                    getMemParams["properties"] = getMemProps;
+                    QJsonArray reqArray;
+                    reqArray.append("name");
+                    getMemParams["required"] = reqArray;
+                    getMemFn["parameters"] = getMemParams;
+                    getMemTool["function"] = getMemFn;
+                    toolsArray.append(getMemTool);
+
+                    QJsonObject listMemTool;
+                    listMemTool["type"] = "function";
+                    QJsonObject listMemFn;
+                    listMemFn["name"] = "list_memories";
+                    listMemFn["description"] = "List all available memory .md files in the local memory library.";
+                    listMemTool["function"] = listMemFn;
+                    toolsArray.append(listMemTool);
+
+                    jsonObj["tools"] = toolsArray;
+                }
+
+                QString memInstruction = "You have access to a local memory library via tools ('get_memory', 'list_memories'). When the user asks about user identity, preferences, code requirements, or project context, automatically call get_memory or list_memories to inspect memory files before answering.";
+
+                bool sysFound = false;
+                if (!messages.isEmpty()) {
+                    QJsonObject firstMsg = messages[0].toObject();
+                    if (firstMsg["role"].toString() == "system") {
+                        QString existingContent = firstMsg["content"].toString();
+                        if (!existingContent.contains(memInstruction)) {
+                            firstMsg["content"] = existingContent + "\n\n" + memInstruction;
+                            messages[0] = firstMsg;
+                        }
+                        sysFound = true;
+                    }
+                }
+                if (!sysFound) {
+                    QJsonObject sysMsg;
+                    sysMsg["role"] = "system";
+                    sysMsg["content"] = memInstruction;
+                    messages.prepend(sysMsg);
+                }
+                jsonObj["messages"] = messages;
             }
-            jsonObj["messages"] = messages;
         }
 
         payloadToSend = QJsonDocument(jsonObj).toJson(QJsonDocument::Compact);
