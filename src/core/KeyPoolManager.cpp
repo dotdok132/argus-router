@@ -100,6 +100,22 @@ void KeyPoolManager::setQueueStrategy(QueueStrategy strategy) {
     }
 }
 
+void KeyPoolManager::sortByPriority() {
+    auto priorityWeight = [](const QString &p) {
+        QString lower = p.toLower().trimmed();
+        if (lower == "high") return 3;
+        if (lower == "medium") return 2;
+        if (lower == "low") return 1;
+        return 0;
+    };
+
+    std::stable_sort(m_keys.begin(), m_keys.end(), [&](const ApiKeyItem &a, const ApiKeyItem &b) {
+        return priorityWeight(a.priority) > priorityWeight(b.priority);
+    });
+    saveToDisk();
+    emit keysUpdated();
+}
+
 void KeyPoolManager::moveKeyUp(int index) {
     if (index > 0 && index < m_keys.size()) {
         m_keys.swapItemsAt(index, index - 1);
@@ -166,6 +182,7 @@ void KeyPoolManager::loadFromDisk(const QString &filePath) {
     }
 
     updateDuplicates();
+    sortByPriority();
     saveToDisk();
     emit keysUpdated();
 }

@@ -59,6 +59,7 @@ public:
 
     void testKey(const QString &id);
     void testAllKeys();
+    void sortByPriority();
 
     void updateKeyRateLimitFromHeaders(const QString &keyId, const QList<QNetworkReply::RawHeaderPair> &headers);
 
