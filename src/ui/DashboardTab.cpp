@@ -110,7 +110,7 @@ void DashboardTab::setupUi() {
     metricsLayout->setSpacing(8);
 
     metricsLayout->addWidget(createMetricCard("Total Pool RPM", "0 RPM", "0% Total Load"));
-    metricsLayout->addWidget(createMetricCard("Session Tokens Used", "0 Tokens", "Live Session Tracker"));
+    metricsLayout->addWidget(createMetricCard("Session Tokens Used", "0 / 0 Tokens", "Consumed / Capacity"));
     metricsLayout->addWidget(createMetricCard("Active Keys", "0 Active", "0 Providers"));
     metricsLayout->addWidget(createMetricCard("Rate Limits Handled", "0 Failovers", "0 Client Downtime"));
 
@@ -204,6 +204,8 @@ void DashboardTab::refreshMetrics() {
         }
     }
 
+    m_totalPoolTpm = totalTpm;
+
     if (m_lblActiveKeysVal) {
         m_lblActiveKeysVal->setText(QString("%1 Active").arg(activeCount));
     }
@@ -212,6 +214,10 @@ void DashboardTab::refreshMetrics() {
     }
     if (m_lblRpmVal) {
         m_lblRpmVal->setText(QString("%1 RPM").arg(totalRpm));
+    }
+    if (m_lblSessionTokensVal) {
+        qint64 limit = m_totalPoolTpm > 0 ? m_totalPoolTpm : 1000000;
+        m_lblSessionTokensVal->setText(QString("%1 / %2 Tokens").arg(QLocale().toString(m_sessionTokens), QLocale().toString(limit)));
     }
     if (m_lblTpmVal) {
         if (totalServed > 0) {
@@ -247,7 +253,8 @@ void DashboardTab::addLogEntry(const QString &time, const QString &clientIp, con
         m_totalTokensServed += tokens;
         m_sessionTokens += tokens;
         if (m_lblSessionTokensVal) {
-            m_lblSessionTokensVal->setText(QString("%1 Tokens").arg(QLocale().toString(m_sessionTokens)));
+            qint64 limit = m_totalPoolTpm > 0 ? m_totalPoolTpm : 1000000;
+            m_lblSessionTokensVal->setText(QString("%1 / %2 Tokens").arg(QLocale().toString(m_sessionTokens), QLocale().toString(limit)));
         }
         if (m_lblTpmVal) {
             m_lblTpmVal->setText(QString("%1 Served").arg(QLocale().toString(m_totalTokensServed)));

@@ -36,6 +36,7 @@ private:
     int m_totalFailovers = 0;
     qint64 m_totalTokensServed = 0;
     qint64 m_sessionTokens = 0;
+    qint64 m_totalPoolTpm = 0;
 };
 
 #endif // DASHBOARDTAB_H
