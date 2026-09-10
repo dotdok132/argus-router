@@ -5,6 +5,7 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QNetworkAccessManager>
+#include <QPointer>
 #include <QNetworkReply>
 #include "KeyPoolManager.h"
 #include "MemoryManager.h"

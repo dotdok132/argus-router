@@ -344,9 +344,17 @@ void HttpProxyServer::forwardChatCompletion(QTcpSocket *socket, const QByteArray
     QElapsedTimer *timer = new QElapsedTimer();
     timer->start();
 
+    QPointer<QTcpSocket> safeSocket(socket);
+
     QNetworkReply *reply = m_netManager->post(upRequest, payloadToSend);
 
-    connect(reply, &QNetworkReply::finished, this, [this, socket, reply, timer, selectedKey, clientIp, logEndpoint, bodyData, jsonObj, keyAttemptIndex, activeKeys, toolDepth, path]() {
+    connect(reply, &QNetworkReply::finished, this, [this, safeSocket, reply, timer, selectedKey, clientIp, logEndpoint, bodyData, jsonObj, keyAttemptIndex, activeKeys, toolDepth, path]() {
+        if (!safeSocket) {
+            reply->deleteLater();
+            delete timer;
+            return;
+        }
+        QTcpSocket *socket = safeSocket.data();
         reply->deleteLater();
         qint64 latencyMs = timer->elapsed();
         delete timer;
