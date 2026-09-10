@@ -65,7 +65,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
     // Start Local HTTP Proxy on Port 8080
     bool proxyOk = m_proxyServer->start(8080);
     if (proxyOk) {
-        statusBar()->showMessage("Proxy listening on http://127.0.0.1:8080 • Ready for OpenAI API requests");
+        statusBar()->showMessage("Proxy listening on http://127.0.0.1:8080 • Ready for LLM requests");
     } else {
         lblStatus->setText("PROXY ERROR (Port 8080 Busy)");
         lblStatus->setStyleSheet("background-color: #481a1a; border: 1px solid #702626; color: #f14c4c;");

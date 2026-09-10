@@ -129,7 +129,7 @@ void DashboardTab::setupUi() {
     mainLayout->addWidget(grpProviders);
 
     // Live Request Traffic Table
-    QGroupBox *grpLog = new QGroupBox("HTTP Traffic Log (OpenAI API Endpoint /v1/chat/completions)");
+    QGroupBox *grpLog = new QGroupBox("HTTP Traffic Log (Endpoint /v1/chat/completions)");
     QVBoxLayout *logLayout = new QVBoxLayout(grpLog);
     logLayout->setContentsMargins(10, 14, 10, 10);
 

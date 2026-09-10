@@ -19,7 +19,7 @@ void SettingsTab::setupUi() {
     mainLayout->setSpacing(10);
 
     // 1. Server Configuration
-    QGroupBox *grpProxy = new QGroupBox("Server Configuration (OpenAI Compatible Local Proxy)");
+    QGroupBox *grpProxy = new QGroupBox("Server Configuration (Local API Proxy)");
     QVBoxLayout *proxyLayout = new QVBoxLayout(grpProxy);
     proxyLayout->setContentsMargins(10, 14, 10, 10);
     proxyLayout->setSpacing(8);
